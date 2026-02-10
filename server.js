@@ -130,7 +130,7 @@ app.get('/logout', (req, res) => {
 
 function isAdmin(req) { return req.user && ADMIN_IDS.includes(req.user.id); }
 
-// --- API ROUTES (Updated for Postgres) ---
+// --- API ROUTES (Updated for Postgre) ---
 
 app.get('/api/servers', async (req, res) => {
     try {
