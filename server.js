@@ -11,7 +11,7 @@ const port = process.env.PORT || 3000;
 const db = new Database('tickets.db');
 
 // --- CONFIGURATION ---
-const ADMIN_IDS = ['76561198000000000']; // REPLACE WITH YOUR STEAM ID
+const ADMIN_IDS = ['76561198871950726']; // REPLACE WITH YOUR STEAM ID
 
 // URLs
 const FRONTEND_URL = 'https://wraathed.github.io/Classic-Rust-Website';
@@ -64,9 +64,13 @@ db.prepare(`
 
 // --- AUTH ---
 passport.use(new SteamStrategy({
+    // Return URL is on Render
     returnURL: `${BACKEND_URL}/auth/steam/return`,
-    realm: FRONTEND_URL,
-    apiKey: 'C14E082E27A3CAA31F86E13B7FD053CC'
+    
+    // CHANGE THIS: Realm must ALSO be on Render to pass security check
+    realm: `${BACKEND_URL}/`, 
+    
+    apiKey: '4C59B011483176A0E56AF7E6C49F13CA'
   },
   (identifier, profile, done) => done(null, profile)
 ));
