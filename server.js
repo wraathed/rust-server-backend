@@ -7,6 +7,7 @@ const { GameDig } = require('gamedig');
 const cors = require('cors');
 
 const app = express();
+app.set('trust proxy', 1);
 const port = process.env.PORT || 3000;
 const db = new Database('tickets.db');
 
@@ -36,9 +37,9 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        sameSite: 'none', // Required for cross-site (GitHub -> Render)
-        secure: true,      // Required for sameSite: 'none'
-        maxAge: 24 * 60 * 60 * 1000 // 1 day
+        sameSite: 'none', 
+        secure: true,      // This works now because of 'trust proxy'
+        maxAge: 24 * 60 * 60 * 1000 
     }
 }));
 
