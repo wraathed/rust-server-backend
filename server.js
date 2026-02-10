@@ -71,7 +71,7 @@ passport.use(new SteamStrategy({
     // CHANGE THIS: Realm must ALSO be on Render to pass security check
     realm: `${BACKEND_URL}/`, 
     
-    apiKey: '4C59B011483176A0E56AF7E6C49F13CA'
+    apiKey: 'ED6078E97DF207E71FC65CD3BD24DB38'
   },
   (identifier, profile, done) => done(null, profile)
 ));
