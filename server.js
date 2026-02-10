@@ -10,19 +10,16 @@ const app = express();
 const port = process.env.PORT || 3000;
 const db = new Database('tickets.db');
 
-// --- TRUST PROXY (REQUIRED FOR RENDER) ---
-app.set('trust proxy', 1);
+// --- CRITICAL FOR RENDER ---
+// This tells Express to trust that Render is handling HTTPS
+app.set('trust proxy', 1); 
 
 // --- CONFIGURATION ---
-const ADMIN_IDS = ['76561198000000000']; // REPLACE WITH YOUR ID
+const ADMIN_IDS = ['76561198871950726']; // REPLACE WITH YOUR STEAM ID
 
-// 1. CORS ORIGIN (Just the domain, NO subfolder)
-const CORS_ORIGIN = 'https://wraathed.github.io';
-
-// 2. REDIRECT URL (Full path to your site)
-const FRONTEND_URL = 'https://wraathed.github.io/Classic-Rust-Website';
-
-// 3. BACKEND URL (Your Render URL)
+// URLs
+const FRONTEND_URL = 'https://wraathed.github.io'; // No trailing slash
+const FRONTEND_FULL_URL = 'https://wraathed.github.io/Classic-Rust-Website';
 const BACKEND_URL = 'https://classic-rust-api.onrender.com'; 
 
 const SERVERS = [
@@ -31,23 +28,25 @@ const SERVERS = [
 
 // --- MIDDLEWARE ---
 app.use(cors({
-    origin: CORS_ORIGIN, // Must match the browser's Origin header exactly
-    credentials: true    // Allows cookies to be sent
+    origin: FRONTEND_URL, // Must match exactly
+    credentials: true,    // Required to accept the cookie
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// --- SESSION SETTINGS (The Fix) ---
 app.use(session({
-    secret: 'rust_server_secret',
+    secret: 'super_secret_rust_key_12345',
     resave: false,
-    saveUninitialized: false,
-    proxy: true, // Important for Render
+    saveUninitialized: false, // Don't create cookies until logged in
+    proxy: true,              // Required for Render
     cookie: {
-        sameSite: 'none', // Required for Cross-Site
-        secure: true,     // Required for SameSite=None
-        maxAge: 24 * 60 * 60 * 1000,
-        httpOnly: true
+        sameSite: 'none',     // Required for Cross-Site (GitHub <-> Render)
+        secure: true,         // Required for SameSite: none
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000 // 1 Day
     }
 }));
 
@@ -58,24 +57,14 @@ passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
 // --- DATABASE SETUP ---
-db.prepare(`
-  CREATE TABLE IF NOT EXISTS tickets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    steamId TEXT, username TEXT, avatar TEXT, category TEXT, subject TEXT, status TEXT DEFAULT 'Open', created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`).run();
-
-db.prepare(`
-  CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id INTEGER, sender_steamId TEXT, sender_name TEXT, sender_avatar TEXT, content TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`).run();
+db.prepare(`CREATE TABLE IF NOT EXISTS tickets (id INTEGER PRIMARY KEY AUTOINCREMENT, steamId TEXT, username TEXT, avatar TEXT, category TEXT, subject TEXT, status TEXT DEFAULT 'Open', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`).run();
+db.prepare(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id INTEGER, sender_steamId TEXT, sender_name TEXT, sender_avatar TEXT, content TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`).run();
 
 // --- AUTH ---
 passport.use(new SteamStrategy({
     returnURL: `${BACKEND_URL}/auth/steam/return`,
-    realm: `${BACKEND_URL}/`, // Realm matches the Backend
-    apiKey: 'ED6078E97DF207E71FC65CD3BD24DB38'
+    realm: `${BACKEND_URL}/`,
+    apiKey: 'ED6078E97DF207E71FC65CD3BD24DB38' // YOUR NEW KEY
   },
   (identifier, profile, done) => done(null, profile)
 ));
@@ -85,19 +74,26 @@ app.get('/auth/steam', passport.authenticate('steam'));
 app.get('/auth/steam/return',
   passport.authenticate('steam', { failureRedirect: '/' }),
   (req, res) => {
-      // SUCCESS: Redirect back to the Frontend
-      res.redirect(`${FRONTEND_URL}/index.html`);
+      // SUCCESS: Save session explicitly before redirecting
+      req.session.save((err) => {
+          res.redirect(`${FRONTEND_FULL_URL}/index.html`);
+      });
   }
 );
 
 app.get('/user', (req, res) => {
+    // If cookie is missing, req.user will be undefined
     if(!req.user) return res.json(null);
     const isAdmin = ADMIN_IDS.includes(req.user.id);
     res.json({ ...req.user, isAdmin });
 });
 
 app.get('/logout', (req, res) => {
-    req.logout(() => res.redirect(`${FRONTEND_URL}/index.html`));
+    req.logout(() => {
+        req.session.destroy(() => {
+            res.redirect(`${FRONTEND_FULL_URL}/index.html`);
+        });
+    });
 });
 
 // --- HELPER ---
