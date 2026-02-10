@@ -7,16 +7,22 @@ const { GameDig } = require('gamedig');
 const cors = require('cors');
 
 const app = express();
-app.set('trust proxy', 1);
 const port = process.env.PORT || 3000;
 const db = new Database('tickets.db');
 
-// --- CONFIGURATION ---
-const ADMIN_IDS = ['76561198871950726']; // REPLACE WITH YOUR STEAM ID
+// --- TRUST PROXY (REQUIRED FOR RENDER) ---
+app.set('trust proxy', 1);
 
-// URLs
+// --- CONFIGURATION ---
+const ADMIN_IDS = ['76561198000000000']; // REPLACE WITH YOUR ID
+
+// 1. CORS ORIGIN (Just the domain, NO subfolder)
+const CORS_ORIGIN = 'https://wraathed.github.io';
+
+// 2. REDIRECT URL (Full path to your site)
 const FRONTEND_URL = 'https://wraathed.github.io/Classic-Rust-Website';
-// PASTE YOUR RENDER URL HERE ONCE DEPLOYED:
+
+// 3. BACKEND URL (Your Render URL)
 const BACKEND_URL = 'https://classic-rust-api.onrender.com'; 
 
 const SERVERS = [
@@ -25,8 +31,8 @@ const SERVERS = [
 
 // --- MIDDLEWARE ---
 app.use(cors({
-    origin: FRONTEND_URL,
-    credentials: true // Allow cookies from GitHub Pages
+    origin: CORS_ORIGIN, // Must match the browser's Origin header exactly
+    credentials: true    // Allows cookies to be sent
 }));
 
 app.use(express.json());
@@ -36,10 +42,12 @@ app.use(session({
     secret: 'rust_server_secret',
     resave: false,
     saveUninitialized: false,
+    proxy: true, // Important for Render
     cookie: {
-        sameSite: 'none', 
-        secure: true,      // This works now because of 'trust proxy'
-        maxAge: 24 * 60 * 60 * 1000 
+        sameSite: 'none', // Required for Cross-Site
+        secure: true,     // Required for SameSite=None
+        maxAge: 24 * 60 * 60 * 1000,
+        httpOnly: true
     }
 }));
 
@@ -65,13 +73,9 @@ db.prepare(`
 
 // --- AUTH ---
 passport.use(new SteamStrategy({
-    // Return URL is on Render
     returnURL: `${BACKEND_URL}/auth/steam/return`,
-    
-    // CHANGE THIS: Realm must ALSO be on Render to pass security check
-    realm: `${BACKEND_URL}/`, 
-    
-    apiKey: 'ED6078E97DF207E71FC65CD3BD24DB38'
+    realm: `${BACKEND_URL}/`, // Realm matches the Backend
+    apiKey: '4C59B011483176A0E56AF7E6C49F13CA'
   },
   (identifier, profile, done) => done(null, profile)
 ));
@@ -80,7 +84,10 @@ app.get('/auth/steam', passport.authenticate('steam'));
 
 app.get('/auth/steam/return',
   passport.authenticate('steam', { failureRedirect: '/' }),
-  (req, res) => res.redirect(`${FRONTEND_URL}/index.html`)
+  (req, res) => {
+      // SUCCESS: Redirect back to the Frontend
+      res.redirect(`${FRONTEND_URL}/index.html`);
+  }
 );
 
 app.get('/user', (req, res) => {
