@@ -66,7 +66,7 @@ db.prepare(`
 passport.use(new SteamStrategy({
     returnURL: `${BACKEND_URL}/auth/steam/return`,
     realm: FRONTEND_URL,
-    apiKey: '4C59B011483176A0E56AF7E6C49F13CA'
+    apiKey: 'C14E082E27A3CAA31F86E13B7FD053CC'
   },
   (identifier, profile, done) => done(null, profile)
 ));
