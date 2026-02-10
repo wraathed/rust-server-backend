@@ -23,7 +23,7 @@ const FRONTEND_FULL_URL = 'https://wraathed.github.io/Classic-Rust-Website';
 const BACKEND_URL = 'https://classic-rust-api.onrender.com'; 
 
 const SERVERS = [
-    { name: "Classic Rust Test Server", ip: "75.76.68.155", port: 28015, type: 'rust' }
+    { name: "Classic Rust Test Server", ip: "75.76.68.155", port: 28016, type: 'rust' }
 ];
 
 // --- MIDDLEWARE ---
