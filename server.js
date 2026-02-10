@@ -22,7 +22,7 @@ const pool = new Pool({
 app.set('trust proxy', 1);
 
 // --- CONFIGURATION ---
-const ADMIN_IDS = ['76561198000000000']; // REPLACE WITH YOUR STEAM ID
+const ADMIN_IDS = ['76561198871950726']; // REPLACE WITH YOUR STEAM ID
 
 const CORS_ORIGIN = 'https://wraathed.github.io';
 const FRONTEND_URL = 'https://wraathed.github.io/Classic-Rust-Website';
