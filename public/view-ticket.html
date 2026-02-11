@@ -30,7 +30,7 @@
 
         /* Admin Controls Styling */
         #admin-controls { display: none; gap: 8px; flex-wrap: wrap; }
-        #admin-controls .btn { padding: 6px 12px; font-size: 11px; text-decoration: none; display: inline-flex; align-items: center; }
+        #admin-controls .btn { padding: 6px 12px; font-size: 11px; text-decoration: none; display: inline-flex; align-items: center; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -52,6 +52,14 @@
     </header>
 
     <div class="container">
+        
+        <!-- NEW: Back Button Wrapper (Outside Chat Container) -->
+        <div id="admin-back-wrapper" style="max-width: 900px; margin: 0 auto 10px auto; display: none;">
+            <a href="admin.html" class="btn" style="background: #444; color: black; font-weight: bold; display: inline-block;">
+                &larr; Back to Panel
+            </a>
+        </div>
+
         <div class="chat-container">
             <div class="chat-header">
                 <div style="flex: 1;">
@@ -59,19 +67,16 @@
                     <p id="ticket-id" style="color:#888; font-size:14px;">#...</p>
                 </div>
                 
-                <!-- NEW: Updated Admin Controls -->
+                <!-- Admin Controls -->
                 <div id="admin-controls">
-                    <!-- 1. Back to Panel -->
-                    <a href="admin.html" class="btn" style="background: #444;">Back to Panel</a>
-
-                    <!-- 2. View Steam Profile (Link set by JS) -->
-                    <a id="steam-profile-link" href="#" target="_blank" class="btn" style="background: #171a21;">
+                    <!-- 1. View Steam Profile -->
+                    <a id="steam-profile-link" href="#" target="_blank" class="btn" style="background: #444; color: black;">
                         <img src="assets/steam.png" style="width:16px; height:16px; margin-right:5px;"> Profile
                     </a>
 
-                    <!-- 3. Status Buttons -->
-                    <button onclick="changeStatus('Open')" class="btn" style="background:#2ecc71;">Re-Open</button>
-                    <button onclick="changeStatus('Closed')" class="btn" style="background:#e74c3c;">Close</button>
+                    <!-- 2. Status Buttons -->
+                    <button onclick="changeStatus('Open')" class="btn" style="background:#2ecc71; color: black;">Re-Open</button>
+                    <button onclick="changeStatus('Closed')" class="btn" style="background:#e74c3c; color: black;">Close</button>
                 </div>
                 
                 <div id="ticket-status" style="font-weight:bold; color:var(--primary-orange); margin-left: 15px;">Open</div>
@@ -132,12 +137,12 @@
                     closedMsg.style.display = 'none';
                 }
 
-                // 3. Show Admin Controls & Set Links
+                // 3. Show Admin Controls
                 if (isAdmin) {
                     document.getElementById('admin-controls').style.display = 'flex';
+                    // Show the "Back to Panel" button outside the box
+                    document.getElementById('admin-back-wrapper').style.display = 'block';
                     
-                    // NEW: Set the Steam Profile Link dynamically
-                    // Note: Postgres usually returns lowercase column names, so we use ticket.steamid
                     const steamId = ticket.steamid || ticket.steamId; 
                     document.getElementById('steam-profile-link').href = `https://steamcommunity.com/profiles/${steamId}`;
                 }
