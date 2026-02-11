@@ -20,7 +20,7 @@ const pool = new Pool({
 app.set('trust proxy', 1);
 
 // --- MAIN CONFIGURATION ---
-const ADMIN_IDS = ['76561198871950726']; // REPLACE WITH YOUR STEAM ID
+const ADMIN_IDS = ['76561198871950726', '76561198839698805']; // REPLACE WITH YOUR STEAM ID
 const DOMAIN = 'https://classic-rust-api.onrender.com'; 
 
 const SERVERS = [
