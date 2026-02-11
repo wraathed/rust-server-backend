@@ -7,16 +7,35 @@
     <style>
         .chat-container { background-color: var(--bg-panel); border: 1px solid #333; border-radius: 10px; padding: 20px; max-width: 900px; margin: 0 auto; }
         .chat-header { border-bottom: 1px solid #333; padding-bottom: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
-        .messages-area { display: flex; flex-direction: column; gap: 15px; max-height: 500px; overflow-y: auto; margin-bottom: 20px; padding-right: 10px; }
+        
+        .messages-area { display: flex; flex-direction: column; gap: 15px; height: 500px; overflow-y: auto; margin-bottom: 20px; padding-right: 10px; }
+        
+        /* Message Rows */
         .message-row { display: flex; gap: 15px; max-width: 80%; }
+        
+        /* MY MESSAGES (Right Side) */
         .message-row.me { align-self: flex-end; flex-direction: row-reverse; text-align: right; }
-        .message-bubble { background-color: #2a2a2a; padding: 15px; border-radius: 10px; border-top-left-radius: 0; color: #ddd; position: relative; }
         .message-row.me .message-bubble { background-color: var(--primary-orange); color: black; border-top-left-radius: 10px; border-top-right-radius: 0; }
-        .sender-name { font-size: 11px; color: #888; margin-bottom: 4px; display: block; }
         .message-row.me .sender-name { color: #333; }
-        .admin-tag { background: #ff4444; color: white; font-size: 10px; padding: 2px 4px; border-radius: 3px; margin-left: 5px; text-transform: uppercase; }
+        
+        /* THEIR MESSAGES (Left Side) */
+        .message-row.other { align-self: flex-start; text-align: left; }
+        .message-row.other .message-bubble { background-color: #2a2a2a; color: #ddd; border-top-left-radius: 0; border-top-right-radius: 10px; }
+        .message-row.other .sender-name { color: #888; }
+
+        .message-bubble { padding: 15px; border-radius: 10px; position: relative; word-wrap: break-word; }
+        .sender-name { font-size: 11px; margin-bottom: 4px; display: block; font-weight: bold; }
+        
+        /* ADMIN BADGE */
+        .admin-tag { background: #ff4444; color: white; font-size: 10px; padding: 2px 5px; border-radius: 3px; margin-left: 5px; text-transform: uppercase; vertical-align: middle; }
+
         .avatar { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #333; }
+        
+        /* Reply Box */
         .reply-box { display: flex; gap: 10px; border-top: 1px solid #333; padding-top: 20px; }
+        
+        /* Disabled State */
+        .reply-box.disabled { opacity: 0.5; pointer-events: none; }
     </style>
 </head>
 <body>
@@ -45,7 +64,7 @@
                     <p id="ticket-id" style="color:#888; font-size:14px;">#...</p>
                 </div>
                 <div id="admin-controls" style="display:none; gap: 10px;">
-                    <button onclick="changeStatus('Open')" class="btn" style="padding:5px 10px; font-size:12px; background:#2ecc71;">Mark Open</button>
+                    <button onclick="changeStatus('Open')" class="btn" style="padding:5px 10px; font-size:12px; background:#2ecc71;">Re-Open Ticket</button>
                     <button onclick="changeStatus('Closed')" class="btn" style="padding:5px 10px; font-size:12px; background:#e74c3c;">Close Ticket</button>
                 </div>
                 <div id="ticket-status" style="font-weight:bold; color:var(--primary-orange);">Open</div>
@@ -53,25 +72,27 @@
 
             <div id="messages-area" class="messages-area"></div>
 
-            <div class="reply-box">
+            <div class="reply-box" id="reply-box">
                 <textarea id="reply-content" rows="2" placeholder="Write a reply..." style="resize:none;"></textarea>
-                <button onclick="sendReply()" class="btn btn-primary">Send</button>
+                <button onclick="sendReply()" class="btn btn-primary" id="send-btn">Send</button>
             </div>
+            <p id="closed-message" style="display:none; text-align:center; color:#ff4444; margin-top:10px; font-weight:bold;">This ticket is closed. No further replies allowed.</p>
         </div>
     </div>
 
     <script src="auth.js"></script>
     <script src="loader.js"></script>
     <script>
-        const API_BASE = '';
+        const API_BASE = ''; // Same domain
         const params = new URLSearchParams(window.location.search);
         const ticketId = params.get('id');
 
         if (!ticketId) window.location.href = 'profile.html';
 
+        let isFirstLoad = true;
+
         async function loadTicket() {
             try {
-                // IMPORTANT: Added credentials: 'include'
                 const res = await fetch(`${API_BASE}/api/ticket/${ticketId}`, { credentials: 'include' });
                 
                 if (res.status === 403 || res.status === 401) {
@@ -83,36 +104,71 @@
                 const data = await res.json();
                 const { ticket, messages, currentUserSteamId, isAdmin } = data;
 
+                // 1. Update Header Info
                 document.getElementById('ticket-subject').innerText = ticket.subject;
                 document.getElementById('ticket-id').innerText = `Ticket #${ticket.id} - ${ticket.category}`;
                 document.getElementById('ticket-status').innerText = ticket.status;
 
+                // 2. Handle Closed State
+                const replyBox = document.getElementById('reply-box');
+                const closedMsg = document.getElementById('closed-message');
+
+                if (ticket.status === 'Closed') {
+                    replyBox.classList.add('disabled');
+                    document.getElementById('reply-content').disabled = true;
+                    document.getElementById('send-btn').disabled = true;
+                    closedMsg.style.display = 'block';
+                } else {
+                    replyBox.classList.remove('disabled');
+                    document.getElementById('reply-content').disabled = false;
+                    document.getElementById('send-btn').disabled = false;
+                    closedMsg.style.display = 'none';
+                }
+
+                // 3. Show Admin Controls (Only if I am admin)
                 if (isAdmin) {
                     document.getElementById('admin-controls').style.display = 'flex';
                 }
 
+                // 4. Render Messages
                 const chatArea = document.getElementById('messages-area');
-                chatArea.innerHTML = '';
+                
+                // Store scroll position to prevent jumping if user scrolled up
+                const isScrolledToBottom = chatArea.scrollHeight - chatArea.scrollTop <= chatArea.clientHeight + 100;
 
+                let html = '';
                 messages.forEach(msg => {
-                    const isMe = msg.sender_steamId === currentUserSteamId;
-                    const isSupport = msg.sender_steamId !== ticket.steamId; 
+                    const isMe = msg.sender_steamid === currentUserSteamId; // Note: Postgres returns lowercase 'steamid'
+                    
+                    // Logic: If I am NOT the sender, AND the sender is in the Admin list, show badge
+                    // The backend now sends 'isAdminSender' as true/false
+                    const showAdminBadge = msg.isAdminSender;
 
-                    const rowHtml = `
-                        <div class="message-row ${isMe ? 'me' : ''}">
+                    html += `
+                        <div class="message-row ${isMe ? 'me' : 'other'}">
                             <img src="${msg.sender_avatar}" class="avatar">
                             <div class="message-bubble">
                                 <span class="sender-name">
                                     ${msg.sender_name}
-                                    ${isSupport ? '<span class="admin-tag">STAFF</span>' : ''}
+                                    ${showAdminBadge ? '<span class="admin-tag">ADMIN</span>' : ''}
                                 </span>
                                 ${msg.content}
                             </div>
                         </div>
                     `;
-                    chatArea.innerHTML += rowHtml;
                 });
-                chatArea.scrollTop = chatArea.scrollHeight;
+
+                // Only update HTML if it changed (prevents text selection reset)
+                if (chatArea.innerHTML !== html) {
+                    chatArea.innerHTML = html;
+                    
+                    // Only auto-scroll on first load OR if user was already at bottom
+                    if (isFirstLoad || isScrolledToBottom) {
+                        chatArea.scrollTop = chatArea.scrollHeight;
+                        isFirstLoad = false;
+                    }
+                }
+
             } catch (err) {
                 console.error(err);
             }
@@ -122,20 +178,23 @@
             const content = document.getElementById('reply-content').value;
             if (!content.trim()) return;
 
-            // IMPORTANT: Added credentials: 'include'
-            await fetch(`${API_BASE}/api/ticket/${ticketId}/reply`, {
+            const res = await fetch(`${API_BASE}/api/ticket/${ticketId}/reply`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({ content })
             });
 
-            document.getElementById('reply-content').value = '';
-            loadTicket(); 
+            if (res.ok) {
+                document.getElementById('reply-content').value = '';
+                loadTicket(); // Immediate reload
+            } else {
+                const err = await res.json();
+                alert(err.error || "Failed to send message");
+            }
         }
 
         async function changeStatus(newStatus) {
-            // IMPORTANT: Added credentials: 'include'
             await fetch(`${API_BASE}/api/ticket/${ticketId}/status`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -145,7 +204,11 @@
             loadTicket();
         }
 
+        // Initial Load
         loadTicket();
+
+        // POLL FOR NEW MESSAGES (Every 3 seconds)
+        setInterval(loadTicket, 3000);
     </script>
 
     <footer>

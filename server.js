@@ -4,7 +4,7 @@ const passport = require('passport');
 const SteamStrategy = require('passport-steam').Strategy;
 const { Pool } = require('pg');
 const { GameDig } = require('gamedig');
-const path = require('path'); // Required to find your HTML files
+const path = require('path');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -16,11 +16,12 @@ const pool = new Pool({
 });
 
 // --- RENDER CONFIGURATION ---
+// Critical: Tells Express it's behind Render's Load Balancer (for secure cookies)
 app.set('trust proxy', 1);
 
 // --- MAIN CONFIGURATION ---
-const ADMIN_IDS = ['76561198871950726']; // REPLACE WITH YOUR STEAM ID
-const DOMAIN = 'https://classic-rust-api.onrender.com'; // This is now your ONLY website URL
+const ADMIN_IDS = ['76561198000000000']; // REPLACE WITH YOUR STEAM ID
+const DOMAIN = 'https://classic-rust-api.onrender.com'; 
 
 const SERVERS = [
     { name: "Classic Rust Test Server", ip: "75.76.68.155", port: 28016, type: 'rust' }
@@ -30,11 +31,10 @@ const SERVERS = [
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 1. SERVE STATIC FILES (The Fix for Mobile)
-// This tells the server: "Look in the 'public' folder for index.html, style.css, etc."
+// 1. SERVE STATIC FILES (The Mobile/Safari Fix)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 2. SESSION COOKIES (Now simplified because it's Same-Origin)
+// 2. SESSION COOKIES
 app.use(session({
     secret: 'super_secret_rust_key_12345',
     resave: false,
@@ -66,7 +66,6 @@ app.get('/auth/steam', passport.authenticate('steam'));
 app.get('/auth/steam/return',
   passport.authenticate('steam', { failureRedirect: '/' }),
   (req, res) => {
-      // Successful login! Redirect to the homepage.
       res.redirect('/index.html');
   }
 );
@@ -85,7 +84,7 @@ app.get('/logout', (req, res) => {
     });
 });
 
-// --- API ROUTES (POSTGRES & GAMEDIG) ---
+// --- API ROUTES ---
 
 // 1. Server Status
 app.get('/api/servers', async (req, res) => {
@@ -138,7 +137,7 @@ app.get('/api/my-tickets', async (req, res) => {
     } catch (err) { res.json([]); }
 });
 
-// 4. Get Single Ticket (Chat)
+// 4. Get Single Ticket (Chat) - UPDATED FOR REAL-TIME & BADGES
 app.get('/api/ticket/:id', async (req, res) => {
     if (!req.user) return res.status(401).send("Unauthorized");
     const ticketId = req.params.id;
@@ -148,22 +147,37 @@ app.get('/api/ticket/:id', async (req, res) => {
         const ticket = ticketRes.rows[0];
 
         if (!ticket) return res.status(404).send("Ticket not found");
-        // Check if owner or admin
+        
         const isAdminUser = ADMIN_IDS.includes(req.user.id);
         if (ticket.steamid !== req.user.id && !isAdminUser) return res.status(403).send("Forbidden");
 
         const msgRes = await pool.query('SELECT * FROM messages WHERE ticket_id = \$1 ORDER BY created_at ASC', [ticketId]);
-        res.json({ ticket, messages: msgRes.rows, currentUserSteamId: req.user.id, isAdmin: isAdminUser });
+        
+        // Flag admin messages so frontend can show RED BADGE
+        const enrichedMessages = msgRes.rows.map(msg => ({
+            ...msg,
+            isAdminSender: ADMIN_IDS.includes(msg.sender_steamid)
+        }));
+
+        res.json({ ticket, messages: enrichedMessages, currentUserSteamId: req.user.id, isAdmin: isAdminUser });
     } catch (err) { res.status(500).send("DB Error"); }
 });
 
-// 5. Reply to Ticket
+// 5. Reply to Ticket - UPDATED TO BLOCK CLOSED TICKETS
 app.post('/api/ticket/:id/reply', async (req, res) => {
     if (!req.user) return res.status(401).send("Unauthorized");
     const ticketId = req.params.id;
     const isAdminUser = ADMIN_IDS.includes(req.user.id);
 
     try {
+        // Check Status First
+        const ticketCheck = await pool.query('SELECT status FROM tickets WHERE id = \$1', [ticketId]);
+        if (ticketCheck.rows.length === 0) return res.status(404).send("Not found");
+        
+        if (ticketCheck.rows[0].status === 'Closed') {
+            return res.status(400).json({ error: "Ticket is closed." });
+        }
+
         await pool.query(
             'INSERT INTO messages (ticket_id, sender_steamId, sender_name, sender_avatar, content) VALUES (\$1, \$2, \$3, \$4, \$5)',
             [ticketId, req.user.id, req.user.displayName, req.user.photos[2].value, req.body.content]
