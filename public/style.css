@@ -558,3 +558,152 @@ footer {
     align-items: center;
     justify-content: center;
 }
+
+/* ===========================
+   MOBILE OPTIMIZATION
+   =========================== */
+
+/* Hamburger Menu Icon (Hidden on Desktop) */
+.menu-toggle {
+    display: none;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 30px;
+    height: 21px;
+    cursor: pointer;
+    z-index: 20;
+}
+
+.menu-toggle span {
+    display: block;
+    height: 3px;
+    width: 100%;
+    background-color: var(--text-white);
+    border-radius: 3px;
+    transition: 0.3s;
+}
+
+/* --- MOBILE SCREEN STYLES (Max Width 768px) --- */
+@media (max-width: 768px) {
+    
+    /* 1. Header & Navigation */
+    header {
+        padding: 15px 5%;
+        background-color: rgba(18, 18, 18, 0.95); /* Dark background so text is readable */
+        position: fixed; /* Stick to top */
+        top: 0;
+    }
+
+    .logo img {
+        max-height: 50px; /* Smaller logo */
+    }
+
+    .menu-toggle {
+        display: flex; /* Show hamburger */
+    }
+
+    /* Hide the normal nav links by default */
+    nav {
+        position: absolute;
+        top: 80px; /* Push below header */
+        left: 0;
+        width: 100%;
+        background-color: var(--bg-panel);
+        border-bottom: 1px solid #333;
+        transform: translateY(-150%); /* Hide up top */
+        transition: 0.4s ease;
+        z-index: 15;
+    }
+
+    /* The class .active will slide it down */
+    nav.active {
+        transform: translateY(0);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    }
+
+    nav ul {
+        flex-direction: column;
+        align-items: center;
+        padding: 20px 0;
+        gap: 20px;
+    }
+
+    /* Hide the Steam button on mobile header to save space, 
+       (Or we can move it inside the menu if you prefer, 
+        but for now let's just make it smaller) */
+    .steam-login {
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+    .steam-login img {
+        width: 18px;
+        height: 18px;
+    }
+
+    /* 2. Hero Section */
+    .hero {
+        padding-top: 100px; /* Space for fixed header */
+        text-align: center;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .hero-content {
+        max-width: 100%;
+    }
+
+    .hero h1 {
+        font-size: 40px; /* Smaller text */
+    }
+
+    .hero p {
+        font-size: 16px;
+    }
+
+    .cta-buttons {
+        flex-direction: column; /* Stack buttons */
+        width: 100%;
+    }
+
+    .btn {
+        width: 100%; /* Full width buttons */
+        text-align: center;
+        display: flex;
+        justify-content: center;
+    }
+
+    /* 3. Containers & Grids */
+    .container {
+        padding: 100px 5% 40px 5%; /* Less padding */
+    }
+
+    .store-grid, .server-preview-grid {
+        grid-template-columns: 1fr; /* Stack cards */
+    }
+
+    /* 4. Chat / Ticket View */
+    .chat-container {
+        padding: 10px;
+        border: none;
+    }
+    
+    .message-row {
+        max-width: 95%; /* Use full width for bubbles */
+    }
+
+    .message-bubble {
+        font-size: 14px;
+        padding: 10px;
+    }
+
+    /* 5. Footer */
+    .footer-content {
+        flex-direction: column;
+        text-align: center;
+        gap: 30px;
+    }
+
+    .footer-right {
+        flex-direction: column;
+    }
+}
