@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Classic Rust - Admin Panel</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .badge-open { background: rgba(255, 145, 0, 0.2); color: var(--primary-orange); border: 1px solid var(--primary-orange); }
+        .badge-answered { background: rgba(52, 152, 219, 0.2); color: #3498db; border: 1px solid #3498db; }
+        .badge-closed { background: #333; color: #aaa; border: 1px solid #555; }
+        .badge-resolved { background: rgba(46, 204, 113, 0.2); color: #2ecc71; border: 1px solid #2ecc71; }
+        tbody tr:hover { background-color: #2a2a2a; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <a href="index.html" class="logo"><img src="assets/logo.png" alt="Logo"></a>
+        <nav>
+            <ul>
+                <li><a href="index.html">Back to Home</a></li>
+                <li><a href="profile.html">My Profile</a></li>
+            </ul>
+        </nav>
+        <div id="auth-section">
+            <a href="/auth/steam" class="steam-login">
+                <img src="assets/steam.png" alt="Steam">
+                Sign in with Steam
+            </a>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="admin-header">
+            <h2>Admin Ticket Panel</h2>
+            <button onclick="loadAdminTickets()" class="btn btn-primary" style="font-size:12px;">Refresh List</button>
+        </div>
+
+        <div id="access-denied" style="display: none; text-align: center; padding: 50px;">
+            <h1 style="color: red;">Access Denied</h1>
+            <p>You do not have permission to view this page.</p>
+        </div>
+
+        <div id="admin-content" class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>User</th>
+                        <th>Subject</th>
+                        <th>Category</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="admin-ticket-list">
+                    <tr><td colspan="6" style="text-align:center; padding:20px;">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="auth.js"></script>
+    <script src="loader.js"></script>
+    <footer>
+        <div class="footer-content">
+            <div class="footer-left">
+                <p>&copy; 2026 Classic Rust. All rights reserved.</p>
+                <p class="credits">Designed by <a href="https://aetheriwebdesign.com/" target="_blank">Aetheri Web Design</a></p>
+            </div>
+            <div class="footer-right">
+                <a href="#">Terms of Service</a>
+                <a href="#">Privacy Policy</a>
+                <a href="https://discord.gg/QdQUvPvg" class="btn btn-discord-small">
+                    <img src="assets/discord.png" alt="Discord" style="width: 20px; height: 20px;">
+                    Join Discord
+                </a>
+            </div>
+        </div>
+    </footer>
+    <script>
+        const API_BASE = '';
+
+        async function loadAdminTickets() {
+            try {
+                // IMPORTANT: Added credentials: 'include'
+                const res = await fetch(`${API_BASE}/api/admin/tickets`, { credentials: 'include' });
+                
+                if (res.status === 403) {
+                    document.getElementById('admin-content').style.display = 'none';
+                    document.getElementById('access-denied').style.display = 'block';
+                    return;
+                }
+                
+                const tickets = await res.json();
+                const tbody = document.getElementById('admin-ticket-list');
+                tbody.innerHTML = '';
+
+                if(tickets.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">No tickets found.</td></tr>';
+                    return;
+                }
+
+                tickets.forEach(t => {
+                    let badgeClass = 'badge-open';
+                    if(t.status === 'Answered') badgeClass = 'badge-answered';
+                    if(t.status === 'Resolved') badgeClass = 'badge-resolved';
+                    if(t.status === 'Closed') badgeClass = 'badge-closed';
+
+                    const row = `
+                        <tr onclick="window.location.href='view-ticket.html?id=${t.id}'">
+                            <td>#${t.id}</td>
+                            <td>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <img src="${t.avatar}" style="width:24px; border-radius:50%;"> 
+                                    <span style="font-size:13px;">${t.username}</span>
+                                </div>
+                            </td>
+                            <td style="font-weight:bold; color:white;">${t.subject}</td>
+                            <td>${t.category}</td>
+                            <td><span class="badge ${badgeClass}">${t.status}</span></td>
+                            <td>
+                                <a href="view-ticket.html?id=${t.id}" class="btn btn-primary" style="padding: 5px 10px; font-size: 11px;">View Chat</a>
+                            </td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            } catch (err) {
+                console.error(err);
+                document.getElementById('admin-ticket-list').innerHTML = '<tr><td colspan="6" style="color:red; text-align:center;">Error loading data.</td></tr>';
+            }
+        }
+
+        loadAdminTickets();
+    </script>
+    
+</body>
+</html>

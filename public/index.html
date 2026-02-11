@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classic Rust - Home</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <a href="index.html" class="logo">
+            <img src="assets/logo.png" alt="Classic Rust Logo">
+        </a>
+        <nav>
+            <ul>
+                <li><a href="servers.html">Servers</a></li>
+                <li><a href="store.html">Store</a></li>
+                <li><a href="create-ticket.html">Create a Ticket</a></li>
+                <li><a href="profile.html">My Profile</a></li>
+            </ul>
+        </nav>
+        <div id="auth-section">
+            <!-- UPDATED: Points to Render Backend -->
+            <a href="/auth/steam" class="steam-login">
+                <img src="assets/steam.png" alt="Steam">
+                Sign in with Steam
+            </a>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="hero-content">
+            <h1>Classic Rust</h1>
+            <p>The classic Rust experience. High performance, top of the line servers with a balanced feel and modern features.</p>
+            <div class="cta-buttons">
+                <a href="store.html" class="btn btn-primary">Visit Store</a>
+                <a href="https://discord.gg/QdQUvPvg" class="btn btn-secondary">
+                    <img src="assets/discord.png" alt="Discord">
+                    Join Discord
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Server Status Section -->
+    <section class="featured-section">
+        <div class="container" style="padding: 0; flex: none;">
+            <h2>Live Status</h2>
+            
+            <div class="server-preview-grid" id="server-list-home">
+                <p style="text-align:center; color:#666; width:100%;">Loading server status...</p>
+            </div>
+
+            <div class="cta-buttons">
+                <a href="servers.html" class="btn btn-primary" style="background-color: transparent; border: 2px solid var(--primary-orange); color: var(--primary-orange);">
+                    View All Servers
+                </a>
+                <a href="store.html" class="btn btn-primary">
+                    Go to Store
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="footer-content">
+            <div class="footer-left">
+                <p>&copy; 2026 Classic Rust. All rights reserved.</p>
+                <p class="credits">Designed by <a href="https://aetheriwebdesign.com/" target="_blank">Aetheri Web Design</a></p>
+            </div>
+            <div class="footer-right">
+                <a href="#">Terms of Service</a>
+                <a href="#">Privacy Policy</a>
+                <a href="https://discord.gg/QdQUvPvg" class="btn btn-discord-small">
+                    <img src="assets/discord.png" alt="Discord" style="width: 20px; height: 20px;">
+                    Join Discord
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="auth.js"></script>
+    <script src="loader.js"></script>
+    
+    <script>
+        // --- CONFIGURATION ---
+        // REPLACE THIS URL with your actual Render URL when you deploy!
+        const API_BASE = '';
+
+        // Updated fetch to use the full API URL
+        fetch(`${API_BASE}/api/servers`)
+            .then(res => res.json())
+            .then(servers => {
+                const container = document.getElementById('server-list-home');
+                container.innerHTML = ''; 
+
+                if(servers.length === 0) {
+                     container.innerHTML = '<p style="text-align:center; width:100%;">No servers found.</p>';
+                     return;
+                }
+
+                servers.forEach(server => {
+                    const isOnline = server.status === 'Online';
+                    const percentage = isOnline ? (server.players / server.maxPlayers) * 100 : 0;
+                    const statusColor = isOnline ? '#2ecc71' : '#ff4444';
+
+                    const card = `
+                        <div class="server-preview-card">
+                            <h3>${server.name}</h3>
+                            <div class="server-meta">
+                                <span>${server.map}</span>
+                                <span style="color:${statusColor}; font-weight:bold;">
+                                    ${isOnline ? `${server.players}/${server.maxPlayers}` : 'Offline'}
+                                </span>
+                            </div>
+                            <div class="pop-bar">
+                                <div class="pop-fill" style="width: ${percentage}%; background-color: ${statusColor};"></div>
+                            </div>
+                        </div>
+                    `;
+                    container.innerHTML += card;
+                });
+            })
+            .catch(err => {
+                console.error(err);
+                document.getElementById('server-list-home').innerHTML = '<p style="color:red; text-align:center;">Failed to load server status.</p>';
+            });
+    </script>
+</body>
+</html>

@@ -1,0 +1,560 @@
+/* style.css */
+
+:root {
+    --primary-orange: #ff9100;
+    --primary-orange-hover: #e68200;
+    --bg-dark: #121212;
+    --bg-panel: #1e1e1e;
+    --text-white: #ffffff;
+    --text-gray: #aaaaaa;
+    --discord-color: #5865F2;
+    --discord-hover: #4752c4;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: var(--text-white);
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* ===========================
+   Navigation Bar
+   =========================== */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 5%;
+    background-color: transparent; 
+    position: absolute;
+    width: 100%;
+    top: 0;
+    z-index: 10;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.logo img {
+    max-height: 80px;
+    width: auto;
+    display: block;
+}
+
+nav ul {
+    list-style: none;
+    display: flex;
+    gap: 30px;
+}
+
+nav a {
+    text-decoration: none;
+    color: var(--text-gray);
+    font-weight: 500;
+    transition: 0.3s;
+}
+
+nav a:hover, nav a.active {
+    color: var(--text-white);
+}
+
+.steam-login {
+    background-color: #2a2a2a;
+    padding: 8px 16px;
+    border-radius: 5px;
+    text-decoration: none;
+    color: var(--text-white);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    border: 1px solid #333;
+    transition: 0.3s;
+}
+
+.steam-login:hover {
+    border-color: var(--primary-orange);
+}
+
+.steam-login img {
+    width: 24px;
+    border-radius: 50%;
+}
+
+/* ===========================
+   Hero Section
+   =========================== */
+.hero {
+    height: 100vh;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 10%;
+    background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url('assets/oilrigbackground.webp');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.hero-content {
+    max-width: 600px;
+    z-index: 2;
+}
+
+.hero h1 {
+    font-size: 64px;
+    line-height: 1.1;
+    margin-bottom: 20px;
+    font-weight: 800;
+}
+
+.hero p {
+    font-size: 20px;
+    color: var(--text-gray);
+    margin-bottom: 40px;
+}
+
+/* ===========================
+   Featured Servers Section (Home)
+   =========================== */
+.featured-section {
+    background-color: var(--bg-dark);
+    padding: 80px 10%;
+    text-align: center;
+}
+
+.server-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin: 40px 0;
+}
+
+.server-preview-card {
+    background-color: var(--bg-panel);
+    border: 1px solid #333;
+    padding: 25px;
+    border-radius: 8px;
+    text-align: left;
+    transition: 0.3s;
+}
+
+.server-preview-card:hover {
+    border-color: var(--primary-orange);
+    transform: translateY(-5px);
+}
+
+.server-preview-card h3 {
+    color: var(--text-white);
+    margin-bottom: 10px;
+}
+
+.server-meta {
+    color: var(--text-gray);
+    font-size: 14px;
+    margin-bottom: 15px;
+    display: flex;
+    justify-content: space-between;
+}
+
+/* Progress Bar for Server Pop */
+.pop-bar {
+    width: 100%;
+    height: 6px;
+    background-color: #333;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.pop-fill {
+    height: 100%;
+    background-color: #2ecc71;
+}
+
+/* ===========================
+   Buttons
+   =========================== */
+.cta-buttons {
+    display: flex;
+    gap: 20px;
+}
+
+/* Center buttons for featured section */
+.featured-section .cta-buttons {
+    justify-content: center;
+}
+
+.btn {
+    padding: 15px 30px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 14px;
+    transition: 0.3s;
+    border: none;
+    cursor: pointer;
+    display: inline-block;
+}
+
+.btn-primary {
+    background-color: var(--primary-orange);
+    color: #000;
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-orange-hover);
+}
+
+.btn-secondary {
+    background-color: var(--discord-color);
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: var(--discord-hover);
+}
+
+/* Small Discord Button for Footer */
+.btn-discord-small {
+    background-color: var(--discord-color);
+    color: white;
+    padding: 8px 16px;
+    font-size: 12px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+}
+.btn-discord-small:hover {
+    background-color: var(--discord-hover);
+}
+
+.discordbtn {
+    width: 20px;
+    height: auto;
+}
+
+/* ===========================
+   General Page Styles
+   =========================== */
+.container {
+    padding: 120px 10%;
+    max-width: 1200px;
+    margin: 0 auto;
+    flex: 1; /* Pushes footer down on short pages */
+    width: 100%;
+}
+
+h2 {
+    font-size: 32px;
+    margin-bottom: 30px;
+    border-left: 5px solid var(--primary-orange);
+    padding-left: 15px;
+}
+
+/* ===========================
+   Tables
+   =========================== */
+.table-container {
+    background-color: var(--bg-panel);
+    border-radius: 10px;
+    padding: 20px;
+    overflow-x: auto;
+    border: 1px solid #333;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    text-align: left;
+    padding: 15px;
+    border-bottom: 1px solid #333;
+}
+
+th {
+    color: var(--text-gray);
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 1px;
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+.status-online {
+    color: #2ecc71;
+    font-weight: bold;
+}
+
+/* ===========================
+   Store Grid (Updated Layout)
+   =========================== */
+.store-grid {
+    display: grid;
+    /* Force 3 columns of equal width */
+    grid-template-columns: repeat(3, 1fr); 
+    gap: 30px;
+    margin-top: 40px;
+    align-items: stretch; /* Makes all cards the same height */
+}
+
+.card {
+    background-color: var(--bg-panel);
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 30px 20px;
+    text-align: center;
+    transition: 0.3s;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+}
+
+.card:hover {
+    border-color: var(--primary-orange);
+    transform: translateY(-10px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+}
+
+.card h3 {
+    font-size: 24px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.card p {
+    color: var(--text-gray);
+    margin-bottom: 20px;
+    flex-grow: 1; /* Pushes the price/button down */
+}
+
+.card h4 {
+    font-size: 28px;
+    margin-bottom: 20px;
+    color: var(--text-white);
+}
+
+/* Special styling for the Featured/Middle card */
+.card.featured {
+    border: 2px solid var(--primary-orange);
+    background: linear-gradient(to bottom, #1e1e1e, #251e12);
+    transform: scale(1.05);
+    z-index: 2;
+}
+
+.card.featured:hover {
+    transform: scale(1.08) translateY(-10px);
+}
+
+/* ===========================
+   Forms
+   =========================== */
+.form-group {
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    margin-bottom: 10px;
+    color: var(--text-gray);
+    font-size: 14px;
+}
+
+input, textarea, select {
+    width: 100%;
+    padding: 12px;
+    background-color: #000;
+    border: 1px solid #333;
+    color: white;
+    border-radius: 5px;
+    outline: none;
+    font-size: 14px;
+}
+
+input:focus, textarea:focus, select:focus {
+    border-color: var(--primary-orange);
+}
+
+/* ===========================
+   Footer
+   =========================== */
+footer {
+    background-color: #0a0a0a;
+    border-top: 1px solid #333;
+    padding: 40px 10%;
+    margin-top: auto; /* Keeps footer at bottom */
+}
+
+.footer-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.footer-left p {
+    color: var(--text-gray);
+    font-size: 14px;
+    margin-bottom: 5px;
+}
+
+.footer-left .credits {
+    font-size: 12px;
+    color: #666;
+}
+
+.footer-left .credits a {
+    color: #888;
+    text-decoration: none;
+    transition: 0.3s;
+}
+
+.footer-left .credits a:hover {
+    color: var(--primary-orange);
+}
+
+.footer-right {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+}
+
+.footer-right a:not(.btn) {
+    color: var(--text-gray);
+    text-decoration: none;
+    font-size: 14px;
+    transition: 0.3s;
+}
+
+.footer-right a:not(.btn):hover {
+    color: var(--primary-orange);
+}
+
+/* Mobile Responsive */
+@media (max-width: 900px) {
+    .hero h1 { font-size: 42px; }
+    .hero { text-align: center; justify-content: center; }
+    
+    .footer-content { flex-direction: column; text-align: center; }
+    .footer-right { flex-direction: column; gap: 15px; }
+
+    /* Store grid stacking on mobile */
+    .store-grid {
+        grid-template-columns: 1fr; 
+        max-width: 500px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    
+    .card.featured {
+        transform: none; /* Remove scale effect on mobile */
+    }
+    
+    .card.featured:hover {
+        transform: translateY(-5px);
+    }
+}
+
+/* ===========================
+   Page Loader Overlay
+   =========================== */
+#page-loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-dark);
+    z-index: 9999; /* Sit on top of everything */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.5s ease, visibility 0.5s;
+}
+
+/* The Orange Bar at the Top */
+.loader-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 4px;
+    background-color: var(--primary-orange);
+    width: 0%; 
+    z-index: 10000;
+    box-shadow: 0 0 10px var(--primary-orange);
+    
+    /* Transition for width (growing) and opacity (fading out) */
+    transition: width 0.4s ease-in-out, opacity 0.5s ease-out; 
+    opacity: 1;
+}
+
+/* New Class to fade the bar out without shrinking it */
+.bar-hidden {
+    opacity: 0;
+}
+
+/* The Spinner */
+.loader-spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #333;
+    border-top: 5px solid var(--primary-orange);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+/* Hide the loader when this class is added */
+.loader-hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ===========================
+   Button Icon Styling
+   =========================== */
+/* Forces images inside buttons to be small and circular */
+.btn img, .steam-login img {
+    width: 24px;
+    height: 24px;
+    object-fit: cover; /* Prevents stretching */
+    border-radius: 50%; /* Makes square images circular */
+    vertical-align: middle;
+    margin-right: 8px; /* Space between icon and text */
+}
+
+/* Specific fix for the Hero buttons to align text correctly */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
