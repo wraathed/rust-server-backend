@@ -20,8 +20,11 @@ const pool = new Pool({
 app.set('trust proxy', 1);
 
 // --- MAIN CONFIGURATION ---
-const ADMIN_IDS = ['76561198871950726', '76561198839698805']; // REPLACE WITH YOUR STEAM ID
+const ADMIN_IDS = ['76561198871950726', '76561198839698805']; // Replace with your IDs
 const DOMAIN = 'https://classic-rust-api.onrender.com'; 
+
+// Ensure you set STEAM_API_KEY in your Render Environment Variables!
+const STEAM_API_KEY = process.env.STEAM_API_KEY || 'YOUR_API_KEY_HERE_IF_TESTING_LOCALLY';
 
 const SERVERS = [
     { name: "Classic Rust Test Server", ip: "75.76.68.155", port: 28016, type: 'rust' }
@@ -31,7 +34,7 @@ const SERVERS = [
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 1. SERVE STATIC FILES (The Mobile/Safari Fix)
+// 1. SERVE STATIC FILES
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 2. SESSION COOKIES
@@ -56,7 +59,7 @@ passport.deserializeUser((obj, done) => done(null, obj));
 passport.use(new SteamStrategy({
     returnURL: `${DOMAIN}/auth/steam/return`,
     realm: `${DOMAIN}/`,
-    apiKey: 'ED6078E97DF207E71FC65CD3BD24DB38'
+    apiKey: STEAM_API_KEY
   },
   (identifier, profile, done) => done(null, profile)
 ));
@@ -137,7 +140,7 @@ app.get('/api/my-tickets', async (req, res) => {
     } catch (err) { res.json([]); }
 });
 
-// 4. Get Single Ticket (Chat) - UPDATED FOR REAL-TIME & BADGES
+// 4. Get Single Ticket (Chat)
 app.get('/api/ticket/:id', async (req, res) => {
     if (!req.user) return res.status(401).send("Unauthorized");
     const ticketId = req.params.id;
@@ -153,7 +156,6 @@ app.get('/api/ticket/:id', async (req, res) => {
 
         const msgRes = await pool.query('SELECT * FROM messages WHERE ticket_id = \$1 ORDER BY created_at ASC', [ticketId]);
         
-        // Flag admin messages so frontend can show RED BADGE
         const enrichedMessages = msgRes.rows.map(msg => ({
             ...msg,
             isAdminSender: ADMIN_IDS.includes(msg.sender_steamid)
@@ -163,14 +165,13 @@ app.get('/api/ticket/:id', async (req, res) => {
     } catch (err) { res.status(500).send("DB Error"); }
 });
 
-// 5. Reply to Ticket - UPDATED TO BLOCK CLOSED TICKETS
+// 5. Reply to Ticket
 app.post('/api/ticket/:id/reply', async (req, res) => {
     if (!req.user) return res.status(401).send("Unauthorized");
     const ticketId = req.params.id;
     const isAdminUser = ADMIN_IDS.includes(req.user.id);
 
     try {
-        // Check Status First
         const ticketCheck = await pool.query('SELECT status FROM tickets WHERE id = \$1', [ticketId]);
         if (ticketCheck.rows.length === 0) return res.status(404).send("Not found");
         
@@ -205,6 +206,42 @@ app.post('/api/ticket/:id/status', async (req, res) => {
         await pool.query('UPDATE tickets SET status = \$1 WHERE id = \$2', [req.body.status, req.params.id]);
         res.json({ success: true });
     } catch (err) { res.status(500).send("Error"); }
+});
+
+// --- NEW SECTION: GAME SERVER INTERACTION ---
+
+// 8. Game Server: Redeem Kit
+// This is called by your C# Oxide Plugin when a player clicks "Redeem"
+app.post('/api/server/redeem', async (req, res) => {
+    try {
+        // The C# plugin sends data in the URL Query String: ?steamId=123&kit=starter
+        const { steamId, kit } = req.query;
+
+        console.log(`[Game Server] Request from ${steamId} to redeem kit: ${kit}`);
+
+        if (!steamId || !kit) {
+            return res.status(400).send("Missing Parameters");
+        }
+
+        // --- FUTURE LOGIC GOES HERE ---
+        // 1. Query your database to see if this user has "credits" or is authorized.
+        // const userCheck = await pool.query('SELECT credits FROM users WHERE steamid = \$1', [steamId]);
+        
+        // For now, we are in "Test Mode", so we just approve everything.
+        const isAuthorized = true; 
+
+        if (isAuthorized) {
+            // Return "OK" to tell the Rust server to give the items
+            res.status(200).send("OK");
+        } else {
+            // Return "FAIL" to tell Rust server to show an error message
+            res.status(403).send("FAIL");
+        }
+
+    } catch (err) {
+        console.error("Redeem Error:", err);
+        res.status(500).send("ERROR");
+    }
 });
 
 app.listen(port, () => {
