@@ -109,32 +109,71 @@
                     document.getElementById('profile-steamid').innerText = `Steam ID: ${user.id}`;
 
                     const infoDiv = document.getElementById('profile-info');
-
-                    // --- DISCORD BUTTON LOGIC ---
-                    const discordBtn = document.createElement('a');
-                    discordBtn.className = 'btn';
-                    discordBtn.style.marginTop = '10px';
-                    discordBtn.style.display = 'inline-flex';
-                    discordBtn.style.alignItems = 'center';
-                    discordBtn.style.gap = '8px';
-                    discordBtn.style.textDecoration = 'none';
+                    
+                    // --- DISCORD CONTAINER ---
+                    const discordContainer = document.createElement('div');
+                    discordContainer.style.marginTop = '10px';
+                    discordContainer.style.display = 'flex';
+                    discordContainer.style.alignItems = 'center';
+                    discordContainer.style.gap = '10px';
 
                     if (user.discord) {
-                        // LINKED
-                        discordBtn.style.backgroundColor = '#43b581'; // Green
-                        discordBtn.style.color = 'white';
-                        discordBtn.style.cursor = 'default';
-                        discordBtn.innerHTML = `<img src="assets/discord.png" style="width:20px;"> Linked: ${user.discord}`;
+                        // LINKED STATUS (Badge)
+                        const statusBadge = document.createElement('div');
+                        statusBadge.style.backgroundColor = '#43b581';
+                        statusBadge.style.color = 'white';
+                        statusBadge.style.padding = '8px 12px';
+                        statusBadge.style.borderRadius = '5px';
+                        statusBadge.style.fontSize = '14px';
+                        statusBadge.innerHTML = `<img src="assets/discord.png" style="width:16px; vertical-align:middle; margin-right:5px;"> Linked: <b>${user.discord}</b>`;
+                        
+                        // UNLINK BUTTON
+                        const unlinkBtn = document.createElement('button');
+                        unlinkBtn.innerText = 'Unlink';
+                        unlinkBtn.className = 'btn';
+                        unlinkBtn.style.backgroundColor = '#e74c3c'; // Red
+                        unlinkBtn.style.padding = '8px 12px';
+                        unlinkBtn.style.fontSize = '12px';
+                        unlinkBtn.style.border = 'none';
+                        unlinkBtn.style.cursor = 'pointer';
+                        
+                        unlinkBtn.onclick = async () => {
+                            if(!confirm("Are you sure you want to unlink your Discord account?")) return;
+                            
+                            try {
+                                const res = await fetch('/auth/discord/unlink', { method: 'POST' });
+                                const data = await res.json();
+                                if(data.success) {
+                                    window.location.reload();
+                                } else {
+                                    alert("Error unlinking account.");
+                                }
+                            } catch(e) {
+                                console.error(e);
+                                alert("Connection error.");
+                            }
+                        };
+
+                        discordContainer.appendChild(statusBadge);
+                        discordContainer.appendChild(unlinkBtn);
+
                     } else {
-                        // NOT LINKED
-                        discordBtn.href = '/auth/discord';
-                        discordBtn.style.backgroundColor = '#7289da'; // Blurple
-                        discordBtn.style.color = 'white';
-                        discordBtn.innerHTML = `<img src="assets/discord.png" style="width:20px;"> Link Discord`;
+                        // NOT LINKED BUTTON
+                        const linkBtn = document.createElement('a');
+                        linkBtn.href = '/auth/discord';
+                        linkBtn.className = 'btn';
+                        linkBtn.style.backgroundColor = '#7289da';
+                        linkBtn.style.color = 'white';
+                        linkBtn.style.textDecoration = 'none';
+                        linkBtn.style.display = 'inline-flex';
+                        linkBtn.style.alignItems = 'center';
+                        linkBtn.style.gap = '8px';
+                        linkBtn.innerHTML = `<img src="assets/discord.png" style="width:20px;"> Link Discord`;
+                        
+                        discordContainer.appendChild(linkBtn);
                     }
                     
-                    infoDiv.appendChild(document.createElement('br'));
-                    infoDiv.appendChild(discordBtn);
+                    infoDiv.appendChild(discordContainer);
 
                     // --- ADMIN BUTTON ---
                     if (user.isAdmin) {
@@ -147,7 +186,7 @@
                         adminBtn.style.padding = '8px 15px';
                         adminBtn.style.fontSize = '12px';
                         adminBtn.style.marginTop = '10px';
-                        adminBtn.style.marginLeft = '10px';
+                        adminBtn.style.display = 'inline-block';
                         infoDiv.appendChild(adminBtn);
                     }
 

@@ -63,7 +63,6 @@ passport.use(new SteamStrategy({
     apiKey: STEAM_API_KEY
   },
   async (identifier, profile, done) => {
-      // Create user row if it doesn't exist
       try {
           await pool.query(
               `INSERT INTO users (steam_id) VALUES (\$1) ON CONFLICT (steam_id) DO NOTHING`,
@@ -86,20 +85,18 @@ passport.use(new DiscordStrategy({
     if (!req.user) return done(new Error("You must be logged into Steam first!"));
 
     try {
-        // Link Discord to Steam ID in DB
         await pool.query(
             `UPDATE users SET discord_id = \$1, discord_username = \$2 WHERE steam_id = \$3`,
             [profile.id, profile.username, req.user.id]
         );
         
-        // Attempt to Join Server
         try {
             await axios.put(
                 `https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${profile.id}`,
                 { access_token: accessToken },
                 { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } }
             );
-        } catch (e) { /* Already in server or permission issue */ }
+        } catch (e) { }
 
         return done(null, req.user);
     } catch (err) {
@@ -114,12 +111,27 @@ app.get('/auth/steam/return', passport.authenticate('steam', { failureRedirect: 
 app.get('/auth/discord', passport.authenticate('discord'));
 app.get('/auth/discord/callback', passport.authenticate('discord', { failureRedirect: '/profile.html' }), (req, res) => res.redirect('/profile.html'));
 
+// --- NEW ROUTE: UNLINK DISCORD ---
+app.post('/auth/discord/unlink', async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Not logged in" });
+
+    try {
+        await pool.query(
+            `UPDATE users SET discord_id = NULL, discord_username = NULL WHERE steam_id = \$1`,
+            [req.user.id]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Unlink Error:", err);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
 // --- USER DATA ---
 app.get('/user', async (req, res) => {
     if(!req.user) return res.json(null);
     const isAdmin = ADMIN_IDS.includes(req.user.id);
 
-    // Check Discord Link Status
     let discordInfo = null;
     try {
         const dbRes = await pool.query('SELECT discord_username FROM users WHERE steam_id = \$1', [req.user.id]);
@@ -139,7 +151,6 @@ app.get('/logout', (req, res) => {
 
 // --- API ROUTES ---
 
-// 1. Server Status
 app.get('/api/servers', async (req, res) => {
     try {
         const promises = SERVERS.map(server =>
@@ -154,7 +165,6 @@ app.get('/api/servers', async (req, res) => {
     } catch (err) { res.json([]); }
 });
 
-// 2. Create Ticket
 app.post('/api/tickets', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Login required' });
     const { category, subject, description } = req.body;
@@ -181,7 +191,6 @@ app.post('/api/tickets', async (req, res) => {
     }
 });
 
-// 3. Get My Tickets
 app.get('/api/my-tickets', async (req, res) => {
     if (!req.user) return res.status(401).json([]);
     try {
@@ -190,7 +199,6 @@ app.get('/api/my-tickets', async (req, res) => {
     } catch (err) { res.json([]); }
 });
 
-// 4. Get Single Ticket (Chat)
 app.get('/api/ticket/:id', async (req, res) => {
     if (!req.user) return res.status(401).send("Unauthorized");
     const ticketId = req.params.id;
@@ -215,7 +223,6 @@ app.get('/api/ticket/:id', async (req, res) => {
     } catch (err) { res.status(500).send("DB Error"); }
 });
 
-// 5. Reply to Ticket
 app.post('/api/ticket/:id/reply', async (req, res) => {
     if (!req.user) return res.status(401).send("Unauthorized");
     const ticketId = req.params.id;
@@ -240,7 +247,6 @@ app.post('/api/ticket/:id/reply', async (req, res) => {
     } catch (err) { res.status(500).send("Error"); }
 });
 
-// 6. Admin Routes
 app.get('/api/admin/tickets', async (req, res) => {
     if (!ADMIN_IDS.includes(req.user?.id)) return res.status(403).json([]);
     try {
@@ -265,18 +271,15 @@ app.post('/api/server/redeem', async (req, res) => {
 
         if (!steamId || !kit) return res.status(400).send("Missing Params");
 
-        // 1. Discord Kit Checks
         if (kit === 'discord' || kit === 'discordbuild') {
             const userRes = await pool.query('SELECT discord_id FROM users WHERE steam_id = \$1', [steamId]);
             
             if (userRes.rows.length === 0 || !userRes.rows[0].discord_id) {
-                console.log("User not linked.");
                 return res.status(403).send("FAIL_LINK"); 
             }
 
             const discordId = userRes.rows[0].discord_id;
 
-            // Check Discord Guild Membership
             try {
                 await axios.get(
                     `https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${discordId}`,
@@ -284,12 +287,10 @@ app.post('/api/server/redeem', async (req, res) => {
                 );
                 return res.status(200).send("OK");
             } catch (discordErr) {
-                console.log("User linked but not in Discord Server.");
                 return res.status(403).send("FAIL_GUILD");
             }
         }
 
-        // 2. Standard Kits - Always OK
         res.status(200).send("OK");
 
     } catch (err) {
