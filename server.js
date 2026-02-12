@@ -2,29 +2,33 @@ const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
 const SteamStrategy = require('passport-steam').Strategy;
+const DiscordStrategy = require('passport-discord').Strategy;
 const { Pool } = require('pg');
 const { GameDig } = require('gamedig');
 const path = require('path');
+const axios = require('axios');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// --- DATABASE CONNECTION (NEON/POSTGRES) ---
+// --- DATABASE CONNECTION ---
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
-// --- RENDER CONFIGURATION ---
-// Critical: Tells Express it's behind Render's Load Balancer (for secure cookies)
+// --- RENDER CONFIG ---
 app.set('trust proxy', 1);
 
 // --- MAIN CONFIGURATION ---
-const ADMIN_IDS = ['76561198871950726', '76561198839698805']; // Replace with your IDs
+const ADMIN_IDS = ['76561198871950726', '76561198839698805']; 
 const DOMAIN = 'https://classic-rust-api.onrender.com'; 
 
-// Ensure you set STEAM_API_KEY in your Render Environment Variables!
-const STEAM_API_KEY = process.env.STEAM_API_KEY || 'YOUR_API_KEY_HERE_IF_TESTING_LOCALLY';
+const STEAM_API_KEY = process.env.STEAM_API_KEY;
+const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
+const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
+const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 
 const SERVERS = [
     { name: "Classic Rust Test Server", ip: "75.76.68.155", port: 28016, type: 'rust' }
@@ -33,19 +37,16 @@ const SERVERS = [
 // --- MIDDLEWARE ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// 1. SERVE STATIC FILES
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 2. SESSION COOKIES
 app.use(session({
     secret: 'super_secret_rust_key_12345',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true, // Required for HTTPS (Render)
+        secure: true, 
         httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000 // 1 Day
+        maxAge: 24 * 60 * 60 * 1000 
     }
 }));
 
@@ -55,35 +56,84 @@ app.use(passport.session());
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
-// --- AUTHENTICATION ---
+// --- 1. STEAM AUTH ---
 passport.use(new SteamStrategy({
     returnURL: `${DOMAIN}/auth/steam/return`,
     realm: `${DOMAIN}/`,
     apiKey: STEAM_API_KEY
   },
-  (identifier, profile, done) => done(null, profile)
+  async (identifier, profile, done) => {
+      // Create user row if it doesn't exist
+      try {
+          await pool.query(
+              `INSERT INTO users (steam_id) VALUES (\$1) ON CONFLICT (steam_id) DO NOTHING`,
+              [profile.id]
+          );
+      } catch (err) { console.error("DB Save Error:", err); }
+      return done(null, profile);
+  }
 ));
 
+// --- 2. DISCORD AUTH ---
+passport.use(new DiscordStrategy({
+    clientID: DISCORD_CLIENT_ID,
+    clientSecret: DISCORD_CLIENT_SECRET,
+    callbackURL: `${DOMAIN}/auth/discord/callback`,
+    scope: ['identify', 'guilds.join'],
+    passReqToCallback: true 
+}, async (req, accessToken, refreshToken, profile, done) => {
+    
+    if (!req.user) return done(new Error("You must be logged into Steam first!"));
+
+    try {
+        // Link Discord to Steam ID in DB
+        await pool.query(
+            `UPDATE users SET discord_id = \$1, discord_username = \$2 WHERE steam_id = \$3`,
+            [profile.id, profile.username, req.user.id]
+        );
+        
+        // Attempt to Join Server
+        try {
+            await axios.put(
+                `https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${profile.id}`,
+                { access_token: accessToken },
+                { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } }
+            );
+        } catch (e) { /* Already in server or permission issue */ }
+
+        return done(null, req.user);
+    } catch (err) {
+        return done(err, null);
+    }
+}));
+
+// --- AUTH ROUTES ---
 app.get('/auth/steam', passport.authenticate('steam'));
+app.get('/auth/steam/return', passport.authenticate('steam', { failureRedirect: '/' }), (req, res) => res.redirect('/index.html'));
 
-app.get('/auth/steam/return',
-  passport.authenticate('steam', { failureRedirect: '/' }),
-  (req, res) => {
-      res.redirect('/index.html');
-  }
-);
+app.get('/auth/discord', passport.authenticate('discord'));
+app.get('/auth/discord/callback', passport.authenticate('discord', { failureRedirect: '/profile.html' }), (req, res) => res.redirect('/profile.html'));
 
-app.get('/user', (req, res) => {
+// --- USER DATA ---
+app.get('/user', async (req, res) => {
     if(!req.user) return res.json(null);
     const isAdmin = ADMIN_IDS.includes(req.user.id);
-    res.json({ ...req.user, isAdmin });
+
+    // Check Discord Link Status
+    let discordInfo = null;
+    try {
+        const dbRes = await pool.query('SELECT discord_username FROM users WHERE steam_id = \$1', [req.user.id]);
+        if (dbRes.rows.length > 0 && dbRes.rows[0].discord_username) {
+            discordInfo = dbRes.rows[0].discord_username;
+        }
+    } catch(e) {}
+
+    res.json({ ...req.user, isAdmin, discord: discordInfo });
 });
 
 app.get('/logout', (req, res) => {
     req.logout(() => {
-        req.session.destroy(() => {
-            res.redirect('/index.html');
-        });
+        req.session.destroy(() => res.redirect('/index.html'));
     });
 });
 
@@ -190,7 +240,7 @@ app.post('/api/ticket/:id/reply', async (req, res) => {
     } catch (err) { res.status(500).send("Error"); }
 });
 
-// 6. Admin: Get All Tickets
+// 6. Admin Routes
 app.get('/api/admin/tickets', async (req, res) => {
     if (!ADMIN_IDS.includes(req.user?.id)) return res.status(403).json([]);
     try {
@@ -199,7 +249,6 @@ app.get('/api/admin/tickets', async (req, res) => {
     } catch (err) { res.json([]); }
 });
 
-// 7. Admin: Change Status
 app.post('/api/ticket/:id/status', async (req, res) => {
     if (!ADMIN_IDS.includes(req.user?.id)) return res.status(403).send("Admins only");
     try {
@@ -208,35 +257,40 @@ app.post('/api/ticket/:id/status', async (req, res) => {
     } catch (err) { res.status(500).send("Error"); }
 });
 
-// --- NEW SECTION: GAME SERVER INTERACTION ---
-
-// 8. Game Server: Redeem Kit
-// This is called by your C# Oxide Plugin when a player clicks "Redeem"
+// --- GAME SERVER REDEEM ---
 app.post('/api/server/redeem', async (req, res) => {
     try {
-        // The C# plugin sends data in the URL Query String: ?steamId=123&kit=starter
         const { steamId, kit } = req.query;
+        console.log(`[Game Server] Request from ${steamId} for kit: ${kit}`);
 
-        console.log(`[Game Server] Request from ${steamId} to redeem kit: ${kit}`);
+        if (!steamId || !kit) return res.status(400).send("Missing Params");
 
-        if (!steamId || !kit) {
-            return res.status(400).send("Missing Parameters");
+        // 1. Discord Kit Checks
+        if (kit === 'discord' || kit === 'discordbuild') {
+            const userRes = await pool.query('SELECT discord_id FROM users WHERE steam_id = \$1', [steamId]);
+            
+            if (userRes.rows.length === 0 || !userRes.rows[0].discord_id) {
+                console.log("User not linked.");
+                return res.status(403).send("FAIL_LINK"); 
+            }
+
+            const discordId = userRes.rows[0].discord_id;
+
+            // Check Discord Guild Membership
+            try {
+                await axios.get(
+                    `https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${discordId}`,
+                    { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } }
+                );
+                return res.status(200).send("OK");
+            } catch (discordErr) {
+                console.log("User linked but not in Discord Server.");
+                return res.status(403).send("FAIL_GUILD");
+            }
         }
 
-        // --- FUTURE LOGIC GOES HERE ---
-        // 1. Query your database to see if this user has "credits" or is authorized.
-        // const userCheck = await pool.query('SELECT credits FROM users WHERE steamid = \$1', [steamId]);
-        
-        // For now, we are in "Test Mode", so we just approve everything.
-        const isAuthorized = true; 
-
-        if (isAuthorized) {
-            // Return "OK" to tell the Rust server to give the items
-            res.status(200).send("OK");
-        } else {
-            // Return "FAIL" to tell Rust server to show an error message
-            res.status(403).send("FAIL");
-        }
+        // 2. Standard Kits - Always OK
+        res.status(200).send("OK");
 
     } catch (err) {
         console.error("Redeem Error:", err);
