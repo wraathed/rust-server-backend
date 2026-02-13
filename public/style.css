@@ -707,3 +707,184 @@ footer {
         flex-direction: column;
     }
 }
+
+/* ===========================
+   NEW PROFILE LAYOUT
+   =========================== */
+
+/* The main container for user info */
+.profile-header-panel {
+    background-color: var(--bg-panel);
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 40px;
+    display: flex;
+    align-items: flex-start; /* Align top */
+    gap: 30px;
+}
+
+/* Avatar styling */
+.profile-avatar-large {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 4px solid var(--primary-orange);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    object-fit: cover;
+}
+
+/* Info section (Name, ID, Badges) */
+.profile-details {
+    flex: 1;
+}
+
+.profile-details h1 {
+    font-size: 36px;
+    margin-bottom: 5px;
+    line-height: 1.2;
+}
+
+.profile-details .steam-id-text {
+    color: var(--text-gray);
+    font-family: 'Courier New', monospace; /* Monospace for ID */
+    font-size: 14px;
+    margin-bottom: 20px;
+    display: block;
+}
+
+/* Grid for Action Badges */
+.profile-actions-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+/* Common style for Status Cards (Discord, Steam, Admin) */
+.status-card {
+    background-color: #121212;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 10px 15px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    color: var(--text-white);
+    transition: 0.3s;
+}
+
+.status-card:hover {
+    border-color: #555;
+}
+
+/* Status Icons inside cards */
+.status-card img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+}
+
+/* -- Status Colors -- */
+.status-card.linked {
+    border-left: 4px solid #43b581; /* Green Link */
+}
+
+.status-card.not-linked {
+    border-left: 4px solid #7289da; /* Discord Blue */
+}
+
+.status-card.steam-joined {
+    border-left: 4px solid #2ecc71; /* Green */
+}
+
+.status-card.steam-not-joined {
+    border-left: 4px solid #e74c3c; /* Red */
+}
+
+.status-card.admin {
+    border-left: 4px solid var(--primary-orange);
+    background-color: #251e12;
+}
+
+/* -- Action Buttons inside cards -- */
+.card-action-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    text-decoration: none;
+    transition: 0.2s;
+}
+
+/* Specific button colors */
+.btn-unlink {
+    color: #e74c3c;
+    background-color: rgba(231, 76, 60, 0.1);
+}
+.btn-unlink:hover {
+    background-color: rgba(231, 76, 60, 0.2);
+}
+
+.btn-link-discord {
+    color: white;
+}
+
+.btn-join-steam {
+    background-color: #171a21;
+    color: white;
+}
+.btn-join-steam:hover {
+    background-color: #2a2a2a;
+}
+
+/* Mobile responsive for profile */
+@media (max-width: 768px) {
+    .profile-header-panel {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 20px;
+    }
+    
+    .profile-actions-grid {
+        justify-content: center;
+    }
+}
+
+/* Toast Notification for Errors */
+#toast {
+    visibility: hidden;
+    min-width: 250px;
+    background-color: #e74c3c;
+    color: #fff;
+    text-align: center;
+    border-radius: 4px;
+    padding: 16px;
+    position: fixed;
+    z-index: 10000;
+    left: 50%;
+    bottom: 30px;
+    transform: translateX(-50%);
+    font-size: 14px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+#toast.show {
+    visibility: visible;
+    animation: fadein 0.5s, fadeout 0.5s 2.5s;
+}
+
+@keyframes fadein {
+    from {bottom: 0; opacity: 0;}
+    to {bottom: 30px; opacity: 1;}
+}
+
+@keyframes fadeout {
+    from {bottom: 30px; opacity: 1;}
+    to {bottom: 0; opacity: 0;}
+}

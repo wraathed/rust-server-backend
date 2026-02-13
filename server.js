@@ -32,7 +32,7 @@ const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 
 // --- STEAM GROUP DETAILS ---
 const STEAM_GROUP_ID = '103582791475507840'; 
-const STEAM_GROUP_URL_NAME = 'classicrustservers'; // The part after /groups/ in the URL
+const STEAM_GROUP_URL_NAME = 'classicrustservers'; 
 
 const SERVERS = [
     { name: "Classic Rust Test Server", ip: "75.76.68.155", port: 28016, type: 'rust' }
@@ -62,30 +62,23 @@ passport.deserializeUser((obj, done) => done(null, obj));
 
 // --- HELPER: ROBUST GROUP CHECK ---
 async function checkGroupMembership(userSteamId) {
-    // 1. Try Official API (Fastest, but fails on Private Profiles)
     try {
         const apiRes = await axios.get(`http://api.steampowered.com/ISteamUser/GetUserGroupList/v1/?key=${STEAM_API_KEY}&steamid=${userSteamId}`);
         const groups = apiRes.data.response.groups || [];
         const isMember = groups.some(g => g.gid === STEAM_GROUP_ID);
         if (isMember) return true;
-    } catch (e) {
-        // API failed or profile is private, proceed to XML check
-    }
+    } catch (e) {}
 
-    // 2. XML Fallback (Works for Private Profiles)
     try {
-        console.log(`[Group Check] API failed, checking XML for ${userSteamId}...`);
+        // XML Fallback for Private Profiles
         const xmlUrl = `https://steamcommunity.com/groups/${STEAM_GROUP_URL_NAME}/memberslistxml/?xml=1`;
         const xmlRes = await axios.get(xmlUrl);
-        
-        // Check if the ID exists specifically in the XML tags to avoid partial matches
         if (xmlRes.data.includes(`<steamID64>${userSteamId}</steamID64>`)) {
             return true;
         }
     } catch (e) {
-        console.error("XML Check Error:", e.message);
+        console.error("Group Check Error:", e.message);
     }
-
     return false;
 }
 
@@ -106,7 +99,7 @@ passport.use(new SteamStrategy({
   }
 ));
 
-// --- 2. DISCORD AUTH ---
+// --- 2. DISCORD AUTH (UPDATED FOR DUPLICATE CHECK) ---
 passport.use(new DiscordStrategy({
     clientID: DISCORD_CLIENT_ID,
     clientSecret: DISCORD_CLIENT_SECRET,
@@ -118,11 +111,27 @@ passport.use(new DiscordStrategy({
     if (!req.user) return done(new Error("You must be logged into Steam first!"));
 
     try {
+        // 1. Check if this Discord ID is already linked to a DIFFERENT Steam ID
+        const existingCheck = await pool.query(
+            `SELECT steam_id FROM users WHERE discord_id = \$1`,
+            [profile.id]
+        );
+
+        if (existingCheck.rows.length > 0) {
+            const existingSteamId = existingCheck.rows[0].steam_id;
+            // If linked to someone else, reject
+            if (existingSteamId !== req.user.id) {
+                return done(null, false, { message: 'duplicate' });
+            }
+        }
+
+        // 2. Link account
         await pool.query(
             `UPDATE users SET discord_id = \$1, discord_username = \$2 WHERE steam_id = \$3`,
             [profile.id, profile.username, req.user.id]
         );
         
+        // 3. Join Guild
         try {
             await axios.put(
                 `https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${profile.id}`,
@@ -142,7 +151,25 @@ app.get('/auth/steam', passport.authenticate('steam'));
 app.get('/auth/steam/return', passport.authenticate('steam', { failureRedirect: '/' }), (req, res) => res.redirect('/index.html'));
 
 app.get('/auth/discord', passport.authenticate('discord'));
-app.get('/auth/discord/callback', passport.authenticate('discord', { failureRedirect: '/profile.html' }), (req, res) => res.redirect('/profile.html'));
+
+// Updated Callback to handle duplicates
+app.get('/auth/discord/callback', (req, res, next) => {
+    passport.authenticate('discord', (err, user, info) => {
+        if (err) return next(err);
+        
+        // If "info" contains message duplicate, redirect with error param
+        if (!user && info && info.message === 'duplicate') {
+            return res.redirect('/profile.html?error=discord_in_use');
+        }
+        
+        if (!user) return res.redirect('/profile.html?error=unknown');
+
+        req.logIn(user, (err) => {
+            if (err) return next(err);
+            return res.redirect('/profile.html');
+        });
+    })(req, res, next);
+});
 
 app.post('/auth/discord/unlink', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Not logged in" });
@@ -164,7 +191,6 @@ app.get('/user', async (req, res) => {
     if(!req.user) return res.json(null);
     const isAdmin = ADMIN_IDS.includes(req.user.id);
 
-    // 1. Get Discord Info
     let discordInfo = null;
     try {
         const dbRes = await pool.query('SELECT discord_username FROM users WHERE steam_id = \$1', [req.user.id]);
@@ -173,7 +199,6 @@ app.get('/user', async (req, res) => {
         }
     } catch(e) { console.error("DB Error:", e); }
 
-    // 2. Check Steam Group Status (Using Helper)
     const inSteamGroup = await checkGroupMembership(req.user.id);
 
     res.json({ 
@@ -190,8 +215,7 @@ app.get('/logout', (req, res) => {
     });
 });
 
-// --- API ROUTES ---
-
+// --- API ROUTES (Tickets/Servers/Redeem) remain unchanged ---
 app.get('/api/servers', async (req, res) => {
     try {
         const promises = SERVERS.map(server =>
@@ -304,7 +328,6 @@ app.post('/api/ticket/:id/status', async (req, res) => {
     } catch (err) { res.status(500).send("Error"); }
 });
 
-// --- GAME SERVER REDEEM ---
 app.post('/api/server/redeem', async (req, res) => {
     try {
         const { steamId, kit } = req.query;
@@ -312,16 +335,12 @@ app.post('/api/server/redeem', async (req, res) => {
 
         if (!steamId || !kit) return res.status(400).send("Missing Params");
 
-        // --- DISCORD KIT CHECK ---
         if (kit === 'discord' || kit === 'discordbuild') {
             const userRes = await pool.query('SELECT discord_id FROM users WHERE steam_id = \$1', [steamId]);
-            
             if (userRes.rows.length === 0 || !userRes.rows[0].discord_id) {
                 return res.status(403).send("FAIL_LINK"); 
             }
-
             const discordId = userRes.rows[0].discord_id;
-
             try {
                 await axios.get(
                     `https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${discordId}`,
@@ -333,11 +352,8 @@ app.post('/api/server/redeem', async (req, res) => {
             }
         }
 
-        // --- STEAM KIT CHECK ---
         if (kit === 'steam') {
-            // Use the robust helper function that checks both API and XML
             const inGroup = await checkGroupMembership(steamId);
-
             if (inGroup) {
                 return res.status(200).send("OK");
             } else {
@@ -345,7 +361,6 @@ app.post('/api/server/redeem', async (req, res) => {
             }
         }
 
-        // Default allow for other kits
         res.status(200).send("OK");
 
     } catch (err) {
