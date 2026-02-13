@@ -177,7 +177,7 @@
                     // 2. STEAM GROUP LOGIC
                     // ==============================
                     if (user.inSteamGroup) {
-                        // --- SUCCESS BADGE ---
+                        // --- SUCCESS BADGE (GREEN) ---
                         const steamBadge = document.createElement('div');
                         steamBadge.style.backgroundColor = '#2ecc71'; // Green
                         steamBadge.style.color = 'white';
@@ -190,11 +190,11 @@
                         
                         actionsContainer.appendChild(steamBadge);
                     } else {
-                        // --- JOIN BUTTON & VERIFY ---
+                        // --- NOT JOINED BADGE (RED) + JOIN BUTTON ---
                         const steamWrapper = document.createElement('div');
                         steamWrapper.style.display = 'flex';
                         steamWrapper.style.alignItems = 'center';
-                        steamWrapper.style.gap = '5px';
+                        steamWrapper.style.gap = '10px';
 
                         // Join Button
                         const steamBtn = document.createElement('a');
@@ -212,20 +212,18 @@
                         steamBtn.style.gap = '8px';
                         steamBtn.innerHTML = `<img src="assets/steam.png" style="width:20px;"> Join Group`;
                         
-                        // Verify Button
-                        const refreshBtn = document.createElement('button');
-                        refreshBtn.innerHTML = '&#x21bb; Verify'; 
-                        refreshBtn.style.backgroundColor = 'transparent';
-                        refreshBtn.style.border = '1px solid #666';
-                        refreshBtn.style.color = '#ccc';
-                        refreshBtn.style.padding = '10px';
-                        refreshBtn.style.borderRadius = '5px';
-                        refreshBtn.style.cursor = 'pointer';
-                        refreshBtn.title = "Click to verify if you joined";
-                        refreshBtn.onclick = () => window.location.reload();
+                        // Negative Status Indicator (Red Badge)
+                        const notJoinedBadge = document.createElement('div');
+                        notJoinedBadge.style.backgroundColor = '#e74c3c'; // Red
+                        notJoinedBadge.style.color = 'white';
+                        notJoinedBadge.style.padding = '10px 12px'; // Height matches button roughly
+                        notJoinedBadge.style.borderRadius = '5px';
+                        notJoinedBadge.style.fontSize = '12px';
+                        notJoinedBadge.style.fontWeight = 'bold';
+                        notJoinedBadge.innerText = 'Not Joined';
 
                         steamWrapper.appendChild(steamBtn);
-                        steamWrapper.appendChild(refreshBtn);
+                        steamWrapper.appendChild(notJoinedBadge);
                         actionsContainer.appendChild(steamWrapper);
                     }
 
