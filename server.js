@@ -20,7 +20,7 @@ const pool = new Pool({
 // --- RENDER CONFIG ---
 app.set('trust proxy', 1);
 
-// --- MAIN CONFIGURATION ---
+// --- CONFIGURATION ---
 const ADMIN_IDS = ['76561198871950726', '76561198839698805']; 
 const DOMAIN = 'https://classic-rust-api.onrender.com'; 
 
@@ -30,8 +30,9 @@ const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 
-// !!! IMPORTANT: REPLACE THIS WITH YOUR 64-BIT STEAM GROUP ID !!!
+// --- STEAM GROUP DETAILS ---
 const STEAM_GROUP_ID = '103582791475507840'; 
+const STEAM_GROUP_URL_NAME = 'classicrustservers'; // The part after /groups/ in the URL
 
 const SERVERS = [
     { name: "Classic Rust Test Server", ip: "75.76.68.155", port: 28016, type: 'rust' }
@@ -58,6 +59,35 @@ app.use(passport.session());
 
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
+
+// --- HELPER: ROBUST GROUP CHECK ---
+async function checkGroupMembership(userSteamId) {
+    // 1. Try Official API (Fastest, but fails on Private Profiles)
+    try {
+        const apiRes = await axios.get(`http://api.steampowered.com/ISteamUser/GetUserGroupList/v1/?key=${STEAM_API_KEY}&steamid=${userSteamId}`);
+        const groups = apiRes.data.response.groups || [];
+        const isMember = groups.some(g => g.gid === STEAM_GROUP_ID);
+        if (isMember) return true;
+    } catch (e) {
+        // API failed or profile is private, proceed to XML check
+    }
+
+    // 2. XML Fallback (Works for Private Profiles)
+    try {
+        console.log(`[Group Check] API failed, checking XML for ${userSteamId}...`);
+        const xmlUrl = `https://steamcommunity.com/groups/${STEAM_GROUP_URL_NAME}/memberslistxml/?xml=1`;
+        const xmlRes = await axios.get(xmlUrl);
+        
+        // Check if the ID exists specifically in the XML tags to avoid partial matches
+        if (xmlRes.data.includes(`<steamID64>${userSteamId}</steamID64>`)) {
+            return true;
+        }
+    } catch (e) {
+        console.error("XML Check Error:", e.message);
+    }
+
+    return false;
+}
 
 // --- 1. STEAM AUTH ---
 passport.use(new SteamStrategy({
@@ -134,7 +164,7 @@ app.get('/user', async (req, res) => {
     if(!req.user) return res.json(null);
     const isAdmin = ADMIN_IDS.includes(req.user.id);
 
-    // 1. Get Discord Info from DB
+    // 1. Get Discord Info
     let discordInfo = null;
     try {
         const dbRes = await pool.query('SELECT discord_username FROM users WHERE steam_id = \$1', [req.user.id]);
@@ -143,19 +173,8 @@ app.get('/user', async (req, res) => {
         }
     } catch(e) { console.error("DB Error:", e); }
 
-    // 2. Check Steam Group Status via API (Real-time check)
-    let inSteamGroup = false;
-    try {
-        const steamResponse = await axios.get(
-            `http://api.steampowered.com/ISteamUser/GetUserGroupList/v1/?key=${STEAM_API_KEY}&steamid=${req.user.id}`
-        );
-        const groups = steamResponse.data.response.groups || [];
-        inSteamGroup = groups.some(g => g.gid === STEAM_GROUP_ID);
-    } catch (err) {
-        // This usually happens if the user's Steam Profile is PRIVATE
-        console.error("Steam Group Check on Profile Load failed:", err.message);
-        inSteamGroup = false; 
-    }
+    // 2. Check Steam Group Status (Using Helper)
+    const inSteamGroup = await checkGroupMembership(req.user.id);
 
     res.json({ 
         ...req.user, 
@@ -316,27 +335,17 @@ app.post('/api/server/redeem', async (req, res) => {
 
         // --- STEAM KIT CHECK ---
         if (kit === 'steam') {
-            try {
-                // Check Steam API for user's groups
-                const steamResponse = await axios.get(
-                    `http://api.steampowered.com/ISteamUser/GetUserGroupList/v1/?key=${STEAM_API_KEY}&steamid=${steamId}`
-                );
+            // Use the robust helper function that checks both API and XML
+            const inGroup = await checkGroupMembership(steamId);
 
-                const groups = steamResponse.data.response.groups || [];
-                const inGroup = groups.some(g => g.gid === STEAM_GROUP_ID);
-
-                if (inGroup) {
-                    return res.status(200).send("OK");
-                } else {
-                    return res.status(403).send("FAIL_STEAM_GROUP");
-                }
-            } catch (err) {
-                console.error("Steam Group Check Error:", err.message);
-                return res.status(403).send("FAIL_STEAM_GROUP"); 
+            if (inGroup) {
+                return res.status(200).send("OK");
+            } else {
+                return res.status(403).send("FAIL_STEAM_GROUP");
             }
         }
 
-        // Default allow for other kits that don't need auth
+        // Default allow for other kits
         res.status(200).send("OK");
 
     } catch (err) {
