@@ -155,7 +155,7 @@
                     grid.appendChild(discordCard);
 
                     // ==============================
-                    // 2. STEAM GROUP CARD
+                    // 2. STEAM GROUP CARD (UPDATED)
                     // ==============================
                     const steamCard = document.createElement('div');
                     const steamGroupUrl = 'https://steamcommunity.com/groups/classicrustservers';
@@ -168,11 +168,20 @@
                         `;
                     } else {
                         steamCard.className = 'status-card steam-not-joined';
+                        // Added style="flex-direction:column; align-items:flex-start;" to allow text below buttons
+                        steamCard.style.flexDirection = 'column';
+                        steamCard.style.alignItems = 'flex-start';
+                        
                         steamCard.innerHTML = `
-                            <img src="assets/steam.png">
-                            <span style="color: #aaa; margin-right: 5px;">Not Joined</span>
-                            <a href="${steamGroupUrl}" target="_blank" class="card-action-btn btn-join-steam">Join</a>
-                            <button onclick="window.location.reload()" class="card-action-btn" title="Refresh" style="background:none; border:1px solid #555; color:#ccc;">&#x21bb;</button>
+                            <div style="display:flex; align-items:center; gap:10px; width:100%;">
+                                <img src="assets/steam.png">
+                                <span style="color: #aaa; margin-right: 5px;">Not Joined</span>
+                                <a href="${steamGroupUrl}" target="_blank" class="card-action-btn btn-join-steam">Join</a>
+                                <button onclick="window.location.reload()" class="card-action-btn" title="Refresh" style="background:none; border:1px solid #555; color:#ccc;">&#x21bb;</button>
+                            </div>
+                            <small style="color:#777; font-size:11px; margin-top:5px; margin-left: 32px;">
+                                It may take a minute for Steam to verify your membership.
+                            </small>
                         `;
                     }
                     grid.appendChild(steamCard);
