@@ -110,13 +110,14 @@
 
                     const infoDiv = document.getElementById('profile-info');
                     
-                    // --- DISCORD CONTAINER ---
-                    const discordContainer = document.createElement('div');
-                    discordContainer.style.marginTop = '10px';
-                    discordContainer.style.display = 'flex';
-                    discordContainer.style.alignItems = 'center';
-                    discordContainer.style.gap = '10px';
+                    // --- ACTIONS CONTAINER (Holds Buttons Side-by-Side) ---
+                    const actionsContainer = document.createElement('div');
+                    actionsContainer.style.marginTop = '15px';
+                    actionsContainer.style.display = 'flex';
+                    actionsContainer.style.alignItems = 'center';
+                    actionsContainer.style.gap = '15px';
 
+                    // 1. DISCORD BUTTON LOGIC
                     if (user.discord) {
                         // LINKED STATUS (Badge)
                         const statusBadge = document.createElement('div');
@@ -136,6 +137,7 @@
                         unlinkBtn.style.fontSize = '12px';
                         unlinkBtn.style.border = 'none';
                         unlinkBtn.style.cursor = 'pointer';
+                        unlinkBtn.style.marginLeft = '10px';
                         
                         unlinkBtn.onclick = async () => {
                             if(!confirm("Are you sure you want to unlink your Discord account?")) return;
@@ -154,8 +156,10 @@
                             }
                         };
 
-                        discordContainer.appendChild(statusBadge);
-                        discordContainer.appendChild(unlinkBtn);
+                        const discordWrapper = document.createElement('div');
+                        discordWrapper.appendChild(statusBadge);
+                        discordWrapper.appendChild(unlinkBtn);
+                        actionsContainer.appendChild(discordWrapper);
 
                     } else {
                         // NOT LINKED BUTTON
@@ -164,16 +168,37 @@
                         linkBtn.className = 'btn';
                         linkBtn.style.backgroundColor = '#7289da';
                         linkBtn.style.color = 'white';
+                        linkBtn.style.padding = '10px 15px';
                         linkBtn.style.textDecoration = 'none';
                         linkBtn.style.display = 'inline-flex';
                         linkBtn.style.alignItems = 'center';
+                        linkBtn.style.borderRadius = '5px';
                         linkBtn.style.gap = '8px';
                         linkBtn.innerHTML = `<img src="assets/discord.png" style="width:20px;"> Link Discord`;
                         
-                        discordContainer.appendChild(linkBtn);
+                        actionsContainer.appendChild(linkBtn);
                     }
+
+                    // 2. STEAM GROUP BUTTON LOGIC (NEW)
+                    const steamBtn = document.createElement('a');
+                    // !!! CHANGE THIS URL TO YOUR STEAM GROUP !!!
+                    steamBtn.href = 'https://steamcommunity.com/groups/YOUR_GROUP_URL_HERE'; 
+                    steamBtn.target = '_blank';
+                    steamBtn.className = 'btn';
+                    steamBtn.style.backgroundColor = '#171a21'; // Steam Dark Blue/Black
+                    steamBtn.style.color = 'white';
+                    steamBtn.style.padding = '10px 15px';
+                    steamBtn.style.textDecoration = 'none';
+                    steamBtn.style.display = 'inline-flex';
+                    steamBtn.style.alignItems = 'center';
+                    steamBtn.style.borderRadius = '5px';
+                    steamBtn.style.gap = '8px';
+                    steamBtn.innerHTML = `<img src="assets/steam.png" style="width:20px;"> Join Steam Group`;
                     
-                    infoDiv.appendChild(discordContainer);
+                    actionsContainer.appendChild(steamBtn);
+
+                    // Add Container to Profile Info
+                    infoDiv.appendChild(actionsContainer);
 
                     // --- ADMIN BUTTON ---
                     if (user.isAdmin) {
@@ -185,7 +210,7 @@
                         adminBtn.style.color = 'white';
                         adminBtn.style.padding = '8px 15px';
                         adminBtn.style.fontSize = '12px';
-                        adminBtn.style.marginTop = '10px';
+                        adminBtn.style.marginTop = '15px';
                         adminBtn.style.display = 'inline-block';
                         infoDiv.appendChild(adminBtn);
                     }

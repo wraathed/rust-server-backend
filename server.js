@@ -30,6 +30,9 @@ const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 
+// !!! IMPORTANT: REPLACE THIS WITH YOUR NUMERIC 64-BIT STEAM GROUP ID (Not the name) !!!
+const STEAM_GROUP_ID = '103582791475507840'; 
+
 const SERVERS = [
     { name: "Classic Rust Test Server", ip: "75.76.68.155", port: 28016, type: 'rust' }
 ];
@@ -271,6 +274,7 @@ app.post('/api/server/redeem', async (req, res) => {
 
         if (!steamId || !kit) return res.status(400).send("Missing Params");
 
+        // --- DISCORD KIT CHECK ---
         if (kit === 'discord' || kit === 'discordbuild') {
             const userRes = await pool.query('SELECT discord_id FROM users WHERE steam_id = \$1', [steamId]);
             
@@ -291,6 +295,31 @@ app.post('/api/server/redeem', async (req, res) => {
             }
         }
 
+        // --- STEAM KIT CHECK ---
+        if (kit === 'steam') {
+            try {
+                // Check Steam API for user's groups
+                const steamResponse = await axios.get(
+                    `http://api.steampowered.com/ISteamUser/GetUserGroupList/v1/?key=${STEAM_API_KEY}&steamid=${steamId}`
+                );
+
+                const groups = steamResponse.data.response.groups || [];
+                // Check if user is in the configured group (comparing GID strings)
+                const inGroup = groups.some(g => g.gid === STEAM_GROUP_ID);
+
+                if (inGroup) {
+                    return res.status(200).send("OK");
+                } else {
+                    return res.status(403).send("FAIL_STEAM_GROUP");
+                }
+            } catch (err) {
+                console.error("Steam Group Check Error:", err.message);
+                // Fail safe: if profile is private or API fails, we usually deny or handle gracefully
+                return res.status(403).send("FAIL_STEAM_GROUP"); 
+            }
+        }
+
+        // Default allow for other kits that don't need auth
         res.status(200).send("OK");
 
     } catch (err) {
