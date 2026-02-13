@@ -30,7 +30,7 @@ const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 
-// !!! IMPORTANT: REPLACE THIS WITH YOUR NUMERIC 64-BIT STEAM GROUP ID (Not the name) !!!
+// !!! IMPORTANT: REPLACE THIS WITH YOUR 64-BIT STEAM GROUP ID !!!
 const STEAM_GROUP_ID = '103582791475507840'; 
 
 const SERVERS = [
@@ -114,7 +114,6 @@ app.get('/auth/steam/return', passport.authenticate('steam', { failureRedirect: 
 app.get('/auth/discord', passport.authenticate('discord'));
 app.get('/auth/discord/callback', passport.authenticate('discord', { failureRedirect: '/profile.html' }), (req, res) => res.redirect('/profile.html'));
 
-// --- NEW ROUTE: UNLINK DISCORD ---
 app.post('/auth/discord/unlink', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Not logged in" });
 
@@ -135,15 +134,35 @@ app.get('/user', async (req, res) => {
     if(!req.user) return res.json(null);
     const isAdmin = ADMIN_IDS.includes(req.user.id);
 
+    // 1. Get Discord Info from DB
     let discordInfo = null;
     try {
         const dbRes = await pool.query('SELECT discord_username FROM users WHERE steam_id = \$1', [req.user.id]);
         if (dbRes.rows.length > 0 && dbRes.rows[0].discord_username) {
             discordInfo = dbRes.rows[0].discord_username;
         }
-    } catch(e) {}
+    } catch(e) { console.error("DB Error:", e); }
 
-    res.json({ ...req.user, isAdmin, discord: discordInfo });
+    // 2. Check Steam Group Status via API (Real-time check)
+    let inSteamGroup = false;
+    try {
+        const steamResponse = await axios.get(
+            `http://api.steampowered.com/ISteamUser/GetUserGroupList/v1/?key=${STEAM_API_KEY}&steamid=${req.user.id}`
+        );
+        const groups = steamResponse.data.response.groups || [];
+        inSteamGroup = groups.some(g => g.gid === STEAM_GROUP_ID);
+    } catch (err) {
+        // This usually happens if the user's Steam Profile is PRIVATE
+        console.error("Steam Group Check on Profile Load failed:", err.message);
+        inSteamGroup = false; 
+    }
+
+    res.json({ 
+        ...req.user, 
+        isAdmin, 
+        discord: discordInfo,
+        inSteamGroup: inSteamGroup 
+    });
 });
 
 app.get('/logout', (req, res) => {
@@ -304,7 +323,6 @@ app.post('/api/server/redeem', async (req, res) => {
                 );
 
                 const groups = steamResponse.data.response.groups || [];
-                // Check if user is in the configured group (comparing GID strings)
                 const inGroup = groups.some(g => g.gid === STEAM_GROUP_ID);
 
                 if (inGroup) {
@@ -314,7 +332,6 @@ app.post('/api/server/redeem', async (req, res) => {
                 }
             } catch (err) {
                 console.error("Steam Group Check Error:", err.message);
-                // Fail safe: if profile is private or API fails, we usually deny or handle gracefully
                 return res.status(403).send("FAIL_STEAM_GROUP"); 
             }
         }

@@ -110,14 +110,17 @@
 
                     const infoDiv = document.getElementById('profile-info');
                     
-                    // --- ACTIONS CONTAINER (Holds Buttons Side-by-Side) ---
+                    // --- ACTIONS CONTAINER ---
                     const actionsContainer = document.createElement('div');
                     actionsContainer.style.marginTop = '15px';
                     actionsContainer.style.display = 'flex';
+                    actionsContainer.style.flexWrap = 'wrap'; 
                     actionsContainer.style.alignItems = 'center';
                     actionsContainer.style.gap = '15px';
 
+                    // ==============================
                     // 1. DISCORD BUTTON LOGIC
+                    // ==============================
                     if (user.discord) {
                         // LINKED STATUS (Badge)
                         const statusBadge = document.createElement('div');
@@ -141,19 +144,11 @@
                         
                         unlinkBtn.onclick = async () => {
                             if(!confirm("Are you sure you want to unlink your Discord account?")) return;
-                            
                             try {
                                 const res = await fetch('/auth/discord/unlink', { method: 'POST' });
                                 const data = await res.json();
-                                if(data.success) {
-                                    window.location.reload();
-                                } else {
-                                    alert("Error unlinking account.");
-                                }
-                            } catch(e) {
-                                console.error(e);
-                                alert("Connection error.");
-                            }
+                                if(data.success) window.location.reload();
+                            } catch(e) { console.error(e); }
                         };
 
                         const discordWrapper = document.createElement('div');
@@ -175,29 +170,66 @@
                         linkBtn.style.borderRadius = '5px';
                         linkBtn.style.gap = '8px';
                         linkBtn.innerHTML = `<img src="assets/discord.png" style="width:20px;"> Link Discord`;
-                        
                         actionsContainer.appendChild(linkBtn);
                     }
 
-                    // 2. STEAM GROUP BUTTON LOGIC (NEW)
-                    const steamBtn = document.createElement('a');
-                    // !!! CHANGE THIS URL TO YOUR STEAM GROUP !!!
-                    steamBtn.href = 'https://steamcommunity.com/groups/classicrustservers'; 
-                    steamBtn.target = '_blank';
-                    steamBtn.className = 'btn';
-                    steamBtn.style.backgroundColor = '#171a21'; // Steam Dark Blue/Black
-                    steamBtn.style.color = 'white';
-                    steamBtn.style.padding = '10px 15px';
-                    steamBtn.style.textDecoration = 'none';
-                    steamBtn.style.display = 'inline-flex';
-                    steamBtn.style.alignItems = 'center';
-                    steamBtn.style.borderRadius = '5px';
-                    steamBtn.style.gap = '8px';
-                    steamBtn.innerHTML = `<img src="assets/steam.png" style="width:20px;"> Join Steam Group`;
-                    
-                    actionsContainer.appendChild(steamBtn);
+                    // ==============================
+                    // 2. STEAM GROUP LOGIC
+                    // ==============================
+                    if (user.inSteamGroup) {
+                        // --- SUCCESS BADGE ---
+                        const steamBadge = document.createElement('div');
+                        steamBadge.style.backgroundColor = '#2ecc71'; // Green
+                        steamBadge.style.color = 'white';
+                        steamBadge.style.padding = '8px 12px';
+                        steamBadge.style.borderRadius = '5px';
+                        steamBadge.style.fontSize = '14px';
+                        steamBadge.style.display = 'flex';
+                        steamBadge.style.alignItems = 'center';
+                        steamBadge.innerHTML = `<img src="assets/steam.png" style="width:16px; vertical-align:middle; margin-right:8px;"> <b>Steam Group Joined</b>`;
+                        
+                        actionsContainer.appendChild(steamBadge);
+                    } else {
+                        // --- JOIN BUTTON & VERIFY ---
+                        const steamWrapper = document.createElement('div');
+                        steamWrapper.style.display = 'flex';
+                        steamWrapper.style.alignItems = 'center';
+                        steamWrapper.style.gap = '5px';
 
-                    // Add Container to Profile Info
+                        // Join Button
+                        const steamBtn = document.createElement('a');
+                        // !!! CHANGE THIS URL TO YOUR STEAM GROUP URL !!!
+                        steamBtn.href = 'https://steamcommunity.com/groups/classicrustservers'; 
+                        steamBtn.target = '_blank';
+                        steamBtn.className = 'btn';
+                        steamBtn.style.backgroundColor = '#171a21';
+                        steamBtn.style.color = 'white';
+                        steamBtn.style.padding = '10px 15px';
+                        steamBtn.style.textDecoration = 'none';
+                        steamBtn.style.display = 'inline-flex';
+                        steamBtn.style.alignItems = 'center';
+                        steamBtn.style.borderRadius = '5px';
+                        steamBtn.style.gap = '8px';
+                        steamBtn.innerHTML = `<img src="assets/steam.png" style="width:20px;"> Join Group`;
+                        
+                        // Verify Button
+                        const refreshBtn = document.createElement('button');
+                        refreshBtn.innerHTML = '&#x21bb; Verify'; 
+                        refreshBtn.style.backgroundColor = 'transparent';
+                        refreshBtn.style.border = '1px solid #666';
+                        refreshBtn.style.color = '#ccc';
+                        refreshBtn.style.padding = '10px';
+                        refreshBtn.style.borderRadius = '5px';
+                        refreshBtn.style.cursor = 'pointer';
+                        refreshBtn.title = "Click to verify if you joined";
+                        refreshBtn.onclick = () => window.location.reload();
+
+                        steamWrapper.appendChild(steamBtn);
+                        steamWrapper.appendChild(refreshBtn);
+                        actionsContainer.appendChild(steamWrapper);
+                    }
+
+                    // Add Container to Profile
                     infoDiv.appendChild(actionsContainer);
 
                     // --- ADMIN BUTTON ---
