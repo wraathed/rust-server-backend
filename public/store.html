@@ -32,6 +32,26 @@
     
     <div class="container">
         <h2 style="text-align: center; border: none;">Store Packages</h2>
+        
+        <!-- NEW: GEM TEST SYSTEM -->
+        <div style="background: rgba(0, 0, 0, 0.4); padding: 25px; border-radius: 8px; text-align: center; margin-bottom: 40px; border: 1px solid #444; max-width: 600px; margin-left: auto; margin-right: auto;">
+            <h3 style="color: #00bcd4; margin-top: 0; text-transform: uppercase; letter-spacing: 1px;">💎 Gem Balance</h3>
+            
+            <div style="font-size: 32px; font-weight: bold; margin: 15px 0;">
+                <span id="gem-balance-display" style="color: white;">---</span> 
+                <span style="font-size: 16px; color: #888;">GEMS</span>
+            </div>
+
+            <p style="color: #aaa; font-size: 14px; margin-bottom: 20px;">
+                Use the button below to simulate a payment. <br>Then type <b>/shop</b> in-game to spend them.
+            </p>
+
+            <button id="btn-add-gems" class="btn btn-primary" style="background-color: #00bcd4; border-color: #00bcd4; color: black; font-weight: bold; width: auto; padding: 10px 30px;">
+                TEST: Add 500 Gems
+            </button>
+        </div>
+        <!-- END GEM TEST SYSTEM -->
+
         <p style="text-align: center; color: #aaa; margin-bottom: 40px;">Select a package to enhance your experience.</p>
         
         <div class="store-grid">
@@ -79,5 +99,57 @@
     <script src="auth.js"></script>
     <script src="loader.js"></script>
     <script src="mobile.js"></script>
+
+    <!-- GEM SYSTEM SCRIPT -->
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const balanceDisplay = document.getElementById('gem-balance-display');
+            const btnAdd = document.getElementById('btn-add-gems');
+
+            // 1. Get current balance
+            fetch('/user')
+            .then(r => r.json())
+            .then(user => {
+                if(user && user.id) {
+                    balanceDisplay.innerText = user.gems || 0;
+                } else {
+                    balanceDisplay.innerText = "?";
+                    btnAdd.innerText = "Login to Test";
+                    btnAdd.disabled = true;
+                    btnAdd.style.opacity = "0.5";
+                    btnAdd.style.cursor = "not-allowed";
+                }
+            })
+            .catch(err => console.error("Error fetching user", err));
+
+            // 2. Handle Add Gems Click
+            if(btnAdd) {
+                btnAdd.addEventListener('click', () => {
+                    // Disable button to prevent spam
+                    btnAdd.disabled = true;
+                    btnAdd.innerText = "Processing...";
+
+                    fetch('/api/gems/test-add', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(data => {
+                        if(data.success) {
+                            alert(data.message);
+                            location.reload(); // Refresh to show new balance
+                        } else {
+                            alert("Error: " + (data.error || "Unknown error"));
+                            btnAdd.disabled = false;
+                            btnAdd.innerText = "TEST: Add 500 Gems";
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        alert("Network error occurred.");
+                        btnAdd.disabled = false;
+                        btnAdd.innerText = "TEST: Add 500 Gems";
+                    });
+                });
+            }
+        });
+    </script>
 </body>
 </html>
