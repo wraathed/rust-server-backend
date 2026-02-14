@@ -17,11 +17,16 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
+// --- DB SCHEMA CHECK ---
+// Ensure the 'ranks' column exists for the new system
+pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS ranks TEXT[] DEFAULT '{}'")
+    .then(() => console.log("Database schema checked: ranks column ready."))
+    .catch(err => console.error("DB Schema Error:", err));
+
 // --- RENDER CONFIG ---
 app.set('trust proxy', 1);
 
 // --- CONFIGURATION ---
-// Replace these with your actual Admin Steam IDs
 const ADMIN_IDS = ['76561198871950726', '76561198839698805']; 
 const DOMAIN = 'https://classic-rust-api.onrender.com'; 
 
@@ -91,9 +96,9 @@ passport.use(new SteamStrategy({
   },
   async (identifier, profile, done) => {
       try {
-          // Ensure user exists in DB, default gems to 0 if new
+          // Ensure user exists in DB, default gems to 0, ranks to empty array
           await pool.query(
-              `INSERT INTO users (steam_id, gems) VALUES (\$1, 0) ON CONFLICT (steam_id) DO NOTHING`,
+              `INSERT INTO users (steam_id, gems, ranks) VALUES (\$1, 0, '{}') ON CONFLICT (steam_id) DO NOTHING`,
               [profile.id]
           );
       } catch (err) { console.error("DB Save Error:", err); }
@@ -178,20 +183,22 @@ app.post('/auth/discord/unlink', async (req, res) => {
     }
 });
 
-// --- USER DATA (Updated for Gems) ---
+// --- USER DATA ---
 app.get('/user', async (req, res) => {
     if(!req.user) return res.json(null);
     const isAdmin = ADMIN_IDS.includes(req.user.id);
 
     let discordInfo = null;
     let gemBalance = 0;
+    let ranks = [];
 
     try {
-        // Fetch fresh data including Gems
-        const dbRes = await pool.query('SELECT discord_username, gems FROM users WHERE steam_id = \$1', [req.user.id]);
+        // Fetch fresh data including Gems and Ranks
+        const dbRes = await pool.query('SELECT discord_username, gems, ranks FROM users WHERE steam_id = \$1', [req.user.id]);
         if (dbRes.rows.length > 0) {
             discordInfo = dbRes.rows[0].discord_username;
             gemBalance = dbRes.rows[0].gems || 0;
+            ranks = dbRes.rows[0].ranks || [];
         }
     } catch(e) { console.error("DB Error:", e); }
 
@@ -201,7 +208,8 @@ app.get('/user', async (req, res) => {
         ...req.user, 
         isAdmin, 
         discord: discordInfo,
-        gems: gemBalance, // Send gems to frontend
+        gems: gemBalance, 
+        ranks: ranks,
         inSteamGroup: inSteamGroup 
     });
 });
@@ -210,6 +218,166 @@ app.get('/logout', (req, res) => {
     req.logout(() => {
         req.session.destroy(() => res.redirect('/index.html'));
     });
+});
+
+// --- WEBSITE STORE API (NEW) ---
+
+// 1. Buy Rank (Simulated)
+app.post('/api/store/buy-rank', async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Login required" });
+    const { rank } = req.body; // 'vip', 'elite', etc.
+
+    if(!rank) return res.status(400).json({error: "No rank specified"});
+
+    try {
+        // Check if user already owns the rank
+        const check = await pool.query('SELECT ranks FROM users WHERE steam_id = \$1', [req.user.id]);
+        const currentRanks = check.rows[0].ranks || [];
+
+        if(currentRanks.includes(rank)) {
+            return res.json({ success: false, error: "You already own this rank!" });
+        }
+
+        // Add rank to the array
+        await pool.query(
+            'UPDATE users SET ranks = array_append(ranks, \$1) WHERE steam_id = \$2',
+            [rank, req.user.id]
+        );
+        
+        res.json({ success: true, message: `Successfully purchased ${rank.toUpperCase()}!` });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Database error during purchase" });
+    }
+});
+
+// 2. Buy Gems (Simulated)
+app.post('/api/store/buy-gems', async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Login required" });
+    const { amount } = req.body;
+
+    if(!amount || isNaN(amount)) return res.status(400).json({error: "Invalid amount"});
+
+    try {
+        await pool.query(
+            'UPDATE users SET gems = gems + \$1 WHERE steam_id = \$2',
+            [amount, req.user.id]
+        );
+        res.json({ success: true, message: `Added ${amount} gems!` });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
+// --- SERVER INTERACTION API (OXIDE PLUGIN) ---
+
+// 1. Redeem Kit (Updated for Ranks)
+app.post('/api/server/redeem', async (req, res) => {
+    try {
+        const { steamId, kit } = req.query;
+        if (!steamId || !kit) return res.status(400).send("Missing Params");
+
+        // CHECK 1: Rank Kits (Website Unlocks)
+        // These kits are stored in the 'ranks' database column
+        const rankKits = ['vip', 'elite', 'soldier', 'juggernaut', 'overlord'];
+        if (rankKits.includes(kit)) {
+            const userRes = await pool.query('SELECT ranks FROM users WHERE steam_id = \$1', [steamId]);
+            const userRanks = userRes.rows[0]?.ranks || [];
+            
+            if (userRanks.includes(kit)) {
+                return res.status(200).send("OK");
+            } else {
+                return res.status(403).send("LOCKED");
+            }
+        }
+
+        // CHECK 2: Discord Kits
+        if (kit === 'discord' || kit === 'discordbuild') {
+            const userRes = await pool.query('SELECT discord_id FROM users WHERE steam_id = \$1', [steamId]);
+            if (userRes.rows.length === 0 || !userRes.rows[0].discord_id) {
+                return res.status(403).send("FAIL_LINK"); 
+            }
+            const discordId = userRes.rows[0].discord_id;
+            try {
+                // Verify they are still in the guild
+                await axios.get(
+                    `https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${discordId}`,
+                    { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } }
+                );
+                return res.status(200).send("OK");
+            } catch (discordErr) {
+                return res.status(403).send("FAIL_GUILD");
+            }
+        }
+
+        // CHECK 3: Steam Group Kits
+        if (kit === 'steam') {
+            const inGroup = await checkGroupMembership(steamId);
+            return inGroup ? res.status(200).send("OK") : res.status(403).send("FAIL_STEAM_GROUP");
+        }
+
+        // Default allow if it falls through (though plugin shouldn't ask for others)
+        res.status(200).send("OK");
+    } catch (err) { 
+        console.error("Redeem Error:", err);
+        res.status(500).send("ERROR"); 
+    }
+});
+
+// 2. Get Gem Balance
+app.get('/api/server/balance', async (req, res) => {
+    const { steamId } = req.query;
+    if (!steamId) return res.send("0");
+
+    try {
+        const result = await pool.query('SELECT gems FROM users WHERE steam_id = \$1', [steamId]);
+        if (result.rows.length > 0) {
+            return res.send(result.rows[0].gems.toString());
+        }
+        return res.send("0");
+    } catch (err) {
+        console.error(err);
+        return res.send("0");
+    }
+});
+
+// 3. Spend Gems (In-Game Shop)
+app.post('/api/server/spend', async (req, res) => {
+    const { steamId, cost } = req.body;
+    if (!steamId || !cost) return res.status(400).send("ERROR");
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN'); // Start Transaction
+
+        // Lock row to prevent race conditions
+        const resCheck = await client.query('SELECT gems FROM users WHERE steam_id = \$1 FOR UPDATE', [steamId]);
+        
+        if (resCheck.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.send("NO_USER");
+        }
+
+        const currentBalance = resCheck.rows[0].gems;
+        if (currentBalance < cost) {
+            await client.query('ROLLBACK');
+            return res.send("INSUFFICIENT_FUNDS");
+        }
+
+        // Deduct Gems
+        await client.query('UPDATE users SET gems = gems - \$1 WHERE steam_id = \$2', [cost, steamId]);
+        
+        await client.query('COMMIT'); // Commit Transaction
+        return res.send("SUCCESS");
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(err);
+        return res.send("ERROR");
+    } finally {
+        client.release();
+    }
 });
 
 // --- TICKET API ---
@@ -299,110 +467,6 @@ app.get('/api/servers', async (req, res) => {
         );
         res.json(await Promise.all(promises));
     } catch (err) { res.json([]); }
-});
-
-// --- KIT REDEMPTION API ---
-app.post('/api/server/redeem', async (req, res) => {
-    try {
-        const { steamId, kit } = req.query;
-        if (!steamId || !kit) return res.status(400).send("Missing Params");
-
-        if (kit === 'discord' || kit === 'discordbuild') {
-            const userRes = await pool.query('SELECT discord_id FROM users WHERE steam_id = \$1', [steamId]);
-            if (userRes.rows.length === 0 || !userRes.rows[0].discord_id) {
-                return res.status(403).send("FAIL_LINK"); 
-            }
-            const discordId = userRes.rows[0].discord_id;
-            try {
-                await axios.get(
-                    `https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${discordId}`,
-                    { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } }
-                );
-                return res.status(200).send("OK");
-            } catch (discordErr) {
-                return res.status(403).send("FAIL_GUILD");
-            }
-        }
-        if (kit === 'steam') {
-            const inGroup = await checkGroupMembership(steamId);
-            return inGroup ? res.status(200).send("OK") : res.status(403).send("FAIL_STEAM_GROUP");
-        }
-        res.status(200).send("OK");
-    } catch (err) { res.status(500).send("ERROR"); }
-});
-
-// --- GEM SYSTEM API (NEW) ---
-
-// 1. WEB: Test Button to Add Gems
-app.post('/api/gems/test-add', async (req, res) => {
-    if (!req.user) return res.status(401).json({ error: "Login required" });
-    const amount = 500; 
-    try {
-        // Increment gems in DB
-        await pool.query(
-            'UPDATE users SET gems = gems + \$1 WHERE steam_id = \$2',
-            [amount, req.user.id]
-        );
-        res.json({ success: true, message: `Added ${amount} gems! Re-open shop in-game.` });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "DB Error" });
-    }
-});
-
-// 2. SERVER: Get Player Balance
-app.get('/api/server/balance', async (req, res) => {
-    const { steamId } = req.query;
-    if (!steamId) return res.send("0");
-
-    try {
-        const result = await pool.query('SELECT gems FROM users WHERE steam_id = \$1', [steamId]);
-        if (result.rows.length > 0) {
-            return res.send(result.rows[0].gems.toString());
-        }
-        return res.send("0");
-    } catch (err) {
-        console.error(err);
-        return res.send("0");
-    }
-});
-
-// 3. SERVER: Spend Gems (Transaction)
-app.post('/api/server/spend', async (req, res) => {
-    const { steamId, cost } = req.body;
-    if (!steamId || !cost) return res.status(400).send("ERROR");
-
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN'); // Start Transaction
-
-        // Lock row to prevent race conditions
-        const resCheck = await client.query('SELECT gems FROM users WHERE steam_id = \$1 FOR UPDATE', [steamId]);
-        
-        if (resCheck.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.send("NO_USER");
-        }
-
-        const currentBalance = resCheck.rows[0].gems;
-        if (currentBalance < cost) {
-            await client.query('ROLLBACK');
-            return res.send("INSUFFICIENT_FUNDS");
-        }
-
-        // Deduct Gems
-        await client.query('UPDATE users SET gems = gems - \$1 WHERE steam_id = \$2', [cost, steamId]);
-        
-        await client.query('COMMIT'); // Commit Transaction
-        return res.send("SUCCESS");
-
-    } catch (err) {
-        await client.query('ROLLBACK');
-        console.error(err);
-        return res.send("ERROR");
-    } finally {
-        client.release();
-    }
 });
 
 app.listen(port, () => {
