@@ -53,7 +53,7 @@
                     <label>Description</label>
                     <textarea id="description" rows="6" placeholder="Describe your issue in detail..." required></textarea>
                 </div>
-                <button type="submit" class="btn btn-primary">Submit Ticket</button>
+                <button type="submit" id="submit-btn" class="btn btn-primary">Submit Ticket</button>
             </form>
         </div>
     </div>
@@ -87,24 +87,45 @@
             const category = document.getElementById('category').value;
             const subject = document.getElementById('subject').value;
             const description = document.getElementById('description').value;
+            const btn = document.getElementById('submit-btn');
+
+            // 1. Disable button to prevent double submits
+            btn.disabled = true;
+            btn.innerText = "Submitting...";
 
             try {
-                // IMPORTANT: Added full URL and credentials: 'include'
                 const response = await fetch(`${API_BASE}/api/tickets`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include', // <--- REQUIRED
+                    credentials: 'include', // <--- REQUIRED: Sends the session cookie
                     body: JSON.stringify({ category, subject, description })
                 });
 
-                if (response.ok) {
+                // 2. Handle specific status codes
+                if (response.status === 401) {
+                    alert('You must be logged in with Steam to create a ticket.');
+                    btn.disabled = false;
+                    btn.innerText = "Submit Ticket";
+                    return;
+                }
+
+                // 3. Parse JSON response from the new server code
+                const data = await response.json();
+
+                if (data.success) {
+                    // Success! Redirect to profile
                     window.location.href = 'profile.html'; 
                 } else {
-                    alert('You must be logged in with Steam to create a ticket.');
+                    // Server returned an error message (e.g. database error)
+                    alert('Error: ' + (data.error || 'Unknown error occurred'));
+                    btn.disabled = false;
+                    btn.innerText = "Submit Ticket";
                 }
             } catch (err) {
                 console.error(err);
-                alert('An error occurred while creating the ticket.');
+                alert('Network error occurred while creating the ticket.');
+                btn.disabled = false;
+                btn.innerText = "Submit Ticket";
             }
         });
     </script>

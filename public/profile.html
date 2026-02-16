@@ -6,6 +6,31 @@
     <link rel="stylesheet" href="style.css">
     <style>
         tbody tr:hover { background-color: #2a2a2a; cursor: pointer; }
+        /* Toast Notification Style */
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            margin-left: -125px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 2px;
+            padding: 16px;
+            position: fixed;
+            z-index: 1;
+            left: 50%;
+            bottom: 30px;
+            font-size: 17px;
+        }
+        #toast.show {
+            visibility: visible;
+            -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s;
+            animation: fadein 0.5s, fadeout 0.5s 2.5s;
+        }
+        @-webkit-keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @-webkit-keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
     </style>
 </head>
 <body>
@@ -38,7 +63,7 @@
     <div class="container">
         <!-- New Profile Header Layout -->
         <div class="profile-header-panel">
-            <img id="profile-avatar" src="" class="profile-avatar-large" alt="Avatar">
+            <img id="profile-avatar" src="assets/logo.png" class="profile-avatar-large" alt="Avatar">
             <div class="profile-details">
                 <h1 id="profile-name">Loading...</h1>
                 <span id="profile-steamid" class="steam-id-text">Please log in...</span>
@@ -108,108 +133,6 @@
             showToast("This Discord account is already linked to another Steam user.");
         }
 
-        // 1. Check User Login & Update Profile
-        fetch('/user', { credentials: 'include' })
-            .then(res => res.json())
-            .then(user => {
-                if (user) {
-                    // Update Basic Info
-                    document.getElementById('profile-avatar').src = user.photos[2].value;
-                    document.getElementById('profile-name').innerText = user.displayName;
-                    document.getElementById('profile-steamid').innerText = `Steam ID: ${user.id}`;
-
-                    const grid = document.getElementById('action-grid');
-                    grid.innerHTML = ''; // Clear loading state
-
-                    // ==============================
-                    // 1. DISCORD CARD
-                    // ==============================
-                    const discordCard = document.createElement('div');
-                    
-                    if (user.discord) {
-                        discordCard.className = 'status-card linked';
-                        discordCard.innerHTML = `
-                            <img src="assets/discord.png">
-                            <span>Linked: <b>${user.discord}</b></span>
-                        `;
-                        
-                        const unlinkBtn = document.createElement('button');
-                        unlinkBtn.innerText = 'Unlink';
-                        unlinkBtn.className = 'card-action-btn btn-unlink';
-                        unlinkBtn.onclick = async () => {
-                            if(!confirm("Unlink Discord?")) return;
-                            try {
-                                const res = await fetch('/auth/discord/unlink', { method: 'POST' });
-                                const data = await res.json();
-                                if(data.success) window.location.reload();
-                            } catch(e) { console.error(e); }
-                        };
-                        discordCard.appendChild(unlinkBtn);
-                    } else {
-                        discordCard.className = 'status-card not-linked';
-                        discordCard.innerHTML = `
-                            <img src="assets/discord.png">
-                            <a href="/auth/discord" class="card-action-btn btn-link-discord">Link Discord</a>
-                        `;
-                    }
-                    grid.appendChild(discordCard);
-
-                    // ==============================
-                    // 2. STEAM GROUP CARD (UPDATED)
-                    // ==============================
-                    const steamCard = document.createElement('div');
-                    const steamGroupUrl = 'https://steamcommunity.com/groups/classicrustservers';
-
-                    if (user.inSteamGroup) {
-                        steamCard.className = 'status-card steam-joined';
-                        steamCard.innerHTML = `
-                            <img src="assets/steam.png">
-                            <span>Steam Group: <b>Joined</b></span>
-                        `;
-                    } else {
-                        steamCard.className = 'status-card steam-not-joined';
-                        // Added style="flex-direction:column; align-items:flex-start;" to allow text below buttons
-                        steamCard.style.flexDirection = 'column';
-                        steamCard.style.alignItems = 'flex-start';
-                        
-                        steamCard.innerHTML = `
-                            <div style="display:flex; align-items:center; gap:10px; width:100%;">
-                                <img src="assets/steam.png">
-                                <span style="color: #aaa; margin-right: 5px;">Not Joined</span>
-                                <a href="${steamGroupUrl}" target="_blank" class="card-action-btn btn-join-steam">Join</a>
-                                <button onclick="window.location.reload()" class="card-action-btn" title="Refresh" style="background:none; border:1px solid #555; color:#ccc;">&#x21bb;</button>
-                            </div>
-                            <small style="color:#777; font-size:11px; margin-top:5px; margin-left: 32px;">
-                                It may take a minute for Steam to verify your membership.
-                            </small>
-                        `;
-                    }
-                    grid.appendChild(steamCard);
-
-                    // ==============================
-                    // 3. ADMIN CARD
-                    // ==============================
-                    if (user.isAdmin) {
-                        const adminCard = document.createElement('div');
-                        adminCard.className = 'status-card admin';
-                        adminCard.innerHTML = `
-                            <span>🔒 Admin Access</span>
-                            <a href="admin.html" class="card-action-btn" style="color: var(--primary-orange);">Open Panel</a>
-                        `;
-                        grid.appendChild(adminCard);
-                    }
-
-                    // Load Tickets
-                    loadMyTickets();
-                } else {
-                    window.location.href = 'index.html'; 
-                }
-            })
-            .catch(err => {
-                console.error("Auth check failed", err);
-                window.location.href = 'index.html';
-            });
-
         function showToast(message) {
             const x = document.getElementById("toast");
             x.innerText = message;
@@ -217,14 +140,106 @@
             setTimeout(function(){ x.className = x.className.replace("show", ""); }, 3000);
         }
 
+        async function initProfile() {
+            try {
+                // 1. Fetch User Data (INCLUDE CREDENTIALS)
+                const res = await fetch('/user', { credentials: 'include' });
+                const user = await res.json();
+
+                if (!user) {
+                    window.location.href = 'index.html'; // Redirect if not logged in
+                    return;
+                }
+
+                // Update Basic Info
+                const avatar = (user.photos && user.photos.length > 2) ? user.photos[2].value : 'assets/logo.png';
+                document.getElementById('profile-avatar').src = avatar;
+                document.getElementById('profile-name').innerText = user.displayName;
+                document.getElementById('profile-steamid').innerText = `Steam ID: ${user.id}`;
+
+                const grid = document.getElementById('action-grid');
+                grid.innerHTML = ''; 
+
+                // --- 1. DISCORD CARD ---
+                const discordCard = document.createElement('div');
+                if (user.discord) {
+                    discordCard.className = 'status-card linked';
+                    discordCard.innerHTML = `
+                        <img src="assets/discord.png">
+                        <span>Linked: <b>${user.discord}</b></span>
+                    `;
+                    const unlinkBtn = document.createElement('button');
+                    unlinkBtn.innerText = 'Unlink';
+                    unlinkBtn.className = 'card-action-btn btn-unlink';
+                    unlinkBtn.onclick = async () => {
+                        if(!confirm("Unlink Discord?")) return;
+                        try {
+                            const r = await fetch('/auth/discord/unlink', { method: 'POST', credentials: 'include' });
+                            const d = await r.json();
+                            if(d.success) window.location.reload();
+                        } catch(e) { console.error(e); }
+                    };
+                    discordCard.appendChild(unlinkBtn);
+                } else {
+                    discordCard.className = 'status-card not-linked';
+                    discordCard.innerHTML = `
+                        <img src="assets/discord.png">
+                        <a href="/auth/discord" class="card-action-btn btn-link-discord">Link Discord</a>
+                    `;
+                }
+                grid.appendChild(discordCard);
+
+                // --- 2. STEAM GROUP CARD ---
+                const steamCard = document.createElement('div');
+                if (user.inSteamGroup) {
+                    steamCard.className = 'status-card steam-joined';
+                    steamCard.innerHTML = `
+                        <img src="assets/steam.png">
+                        <span>Steam Group: <b>Joined</b></span>
+                    `;
+                } else {
+                    steamCard.className = 'status-card steam-not-joined';
+                    steamCard.style.flexDirection = 'column';
+                    steamCard.style.alignItems = 'flex-start';
+                    steamCard.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:10px; width:100%;">
+                            <img src="assets/steam.png">
+                            <span style="color: #aaa; margin-right: 5px;">Not Joined</span>
+                            <a href="https://steamcommunity.com/groups/classicrustservers" target="_blank" class="card-action-btn btn-join-steam">Join</a>
+                            <button onclick="window.location.reload()" class="card-action-btn" title="Refresh" style="background:none; border:1px solid #555; color:#ccc;">&#x21bb;</button>
+                        </div>
+                    `;
+                }
+                grid.appendChild(steamCard);
+
+                // --- 3. ADMIN CARD ---
+                if (user.isAdmin) {
+                    const adminCard = document.createElement('div');
+                    adminCard.className = 'status-card admin';
+                    adminCard.innerHTML = `
+                        <span>🔒 Admin Access</span>
+                        <a href="admin.html" class="card-action-btn" style="color: var(--primary-orange);">Open Panel</a>
+                    `;
+                    grid.appendChild(adminCard);
+                }
+
+                // Load Tickets after user is confirmed
+                loadMyTickets();
+
+            } catch (err) {
+                console.error("Auth check failed", err);
+            }
+        }
+
         async function loadMyTickets() {
             try {
+                // Fetch Tickets (INCLUDE CREDENTIALS)
                 const response = await fetch(`${API_BASE}/api/my-tickets`, { credentials: 'include' });
                 const tickets = await response.json();
                 const tbody = document.getElementById('ticket-body');
                 tbody.innerHTML = ''; 
 
-                if (tickets.length === 0) {
+                if (!tickets || tickets.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">You haven\'t created any tickets yet.</td></tr>';
                     return;
                 }
@@ -254,6 +269,9 @@
                 document.getElementById('ticket-body').innerHTML = '<tr><td colspan="6" style="color:red; text-align:center;">Error loading tickets.</td></tr>';
             }
         }
+
+        // Initialize Page
+        document.addEventListener('DOMContentLoaded', initProfile);
     </script>
 
 </body>

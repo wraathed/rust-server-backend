@@ -1,5 +1,6 @@
 const express = require('express');
 const session = require('express-session');
+const pgSession = require('connect-pg-simple')(session); // ADDED: Persistent Sessions
 const passport = require('passport');
 const SteamStrategy = require('passport-steam').Strategy;
 const DiscordStrategy = require('passport-discord').Strategy;
@@ -13,13 +14,13 @@ const app = express();
 const port = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
-// *** SAFETY FLAG: Set to TRUE to wipe/rebuild ticket tables. Set to FALSE after first run. ***
+// *** SAFETY FLAG: Set to TRUE to wipe tickets tables. Set to FALSE after first run. ***
 const RESET_TICKETS_DB = true; 
 
 // --- DATABASE CONNECTION (NEON.TECH) ---
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false } // Required for Neon/Render
+    ssl: { rejectUnauthorized: false }
 });
 
 // --- ROBUST DB INITIALIZATION ---
@@ -28,18 +29,32 @@ const initDb = async () => {
     try {
         console.log("--- DATABASE INITIALIZATION START ---");
 
-        // 1. Ensure Users Table exists (Preserve this data)
+        // 1. Session Table (Required for persistent logins)
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS "session" (
+                "sid" varchar NOT NULL COLLATE "default",
+                "sess" json NOT NULL,
+                "expire" timestamp(6) NOT NULL
+            )
+            WITH (OIDS=FALSE);
+        `);
+        try {
+            await client.query(`ALTER TABLE "session" ADD CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE`);
+        } catch (e) { /* Ignore if constraint exists */ }
+        await client.query(`CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire")`);
+
+        // 2. Users Table
         await client.query("CREATE TABLE IF NOT EXISTS users (steam_id TEXT PRIMARY KEY, discord_id TEXT, discord_username TEXT, gems INT DEFAULT 0, ranks TEXT[] DEFAULT '{}')");
         await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS ranks TEXT[] DEFAULT '{}'");
 
-        // 2. TICKET SYSTEM REBUILD (If RESET is true)
+        // 3. TICKET SYSTEM REBUILD (If RESET is true)
         if (RESET_TICKETS_DB) {
             console.log("!!! WARNING: DROPPING TICKET TABLES FOR REBUILD !!!");
             await client.query("DROP TABLE IF EXISTS messages CASCADE");
             await client.query("DROP TABLE IF EXISTS tickets CASCADE");
         }
 
-        // 3. Create Clean Ticket Tables (Standardized snake_case)
+        // 4. Ticket Tables
         await client.query(`
             CREATE TABLE IF NOT EXISTS tickets (
                 id SERIAL PRIMARY KEY,
@@ -97,14 +112,19 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// UPDATED: PERSISTENT SESSION STORE
 app.use(session({
+    store: new pgSession({
+        pool: pool,
+        tableName: 'session'
+    }),
     secret: 'super_secret_rust_key_12345',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: isProduction, // Secure in Prod, Not in Dev
+        secure: isProduction, 
         httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000 
+        maxAge: 30 * 24 * 60 * 60 * 1000 // 30 Days
     }
 }));
 
@@ -265,21 +285,19 @@ app.post('/api/server/spend', async (req, res) => {
 
 // 1. CREATE TICKET
 app.post('/api/tickets', async (req, res) => {
-    if (!req.user) return res.status(401).json({ error: 'Login required' });
+    // Debug Login Status
+    if (!req.user) {
+        console.log("Create Ticket Failed: User is NULL in session.");
+        return res.status(401).json({ error: 'Login required' });
+    }
     const { category, subject, description } = req.body;
     
-    // Safety check
     if (!category || !subject || !description) return res.status(400).json({ error: "Missing fields" });
 
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        
-        // SAFE AVATAR ACCESS
         const avatar = getAvatar(req.user);
-
-        // Debug Log
-        console.log(`Creating ticket for ${req.user.displayName} (${req.user.id})`);
 
         const ticketRes = await client.query(
             'INSERT INTO tickets (steam_id, username, avatar, category, subject) VALUES (\\$1, \\$2, \\$3, \\$4, \\$5) RETURNING id',
@@ -350,11 +368,7 @@ app.get('/api/ticket/:id', async (req, res) => {
         if (!ticket) return res.status(404).json({ error: "Ticket not found" });
         
         const isAdminUser = ADMIN_IDS.includes(req.user.id);
-
-        // CHECK OWNERSHIP
-        if (ticket.steam_id !== req.user.id && !isAdminUser) {
-            return res.status(403).json({ error: "Forbidden" });
-        }
+        if (ticket.steam_id !== req.user.id && !isAdminUser) return res.status(403).json({ error: "Forbidden" });
 
         const msgRes = await pool.query('SELECT * FROM messages WHERE ticket_id = \\$1 ORDER BY created_at ASC', [ticketId]);
         
@@ -364,10 +378,8 @@ app.get('/api/ticket/:id', async (req, res) => {
         }));
 
         res.json({ ticket, messages: enrichedMessages, currentUserSteamId: req.user.id, isAdmin: isAdminUser });
-
     } catch (err) { 
         console.error("GET TICKET ERROR:", err);
-        // RETURN JSON, NOT TEXT
         res.status(500).json({ error: "Internal Server Error", details: err.message }); 
     }
 });
