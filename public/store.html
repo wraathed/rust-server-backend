@@ -2,310 +2,82 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Limitless Rust - Store</title>
+    <title>Classic Rust - Store</title>
     <link rel="stylesheet" href="style.css">
-    <style>
-        /* Specific Store Styles matching the screenshot */
-        :root {
-            --bg-dark: #121212;
-            --card-bg: #1e1e1e;
-            --accent: #4ade80; /* Mint Green */
-            --accent-hover: #22c55e;
-            --text-main: #ffffff;
-            --text-dim: #9ca3af;
-        }
-
-        body { background-color: var(--bg-dark); color: var(--text-main); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-
-        .section-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 20px;
-            font-size: 28px;
-            font-weight: bold;
-        }
-        
-        .section-line {
-            height: 4px;
-            width: 40px;
-            background-color: var(--accent);
-            margin-right: 15px;
-            border-radius: 2px;
-        }
-
-        .subtitle { color: var(--text-dim); margin-bottom: 30px; display: block; margin-top: -10px; }
-
-        /* GRID */
-        .grid-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 20px;
-            margin-bottom: 60px;
-        }
-
-        /* CARD */
-        .store-card {
-            background-color: var(--card-bg);
-            border-radius: 8px;
-            padding: 30px 20px;
-            text-align: center;
-            transition: transform 0.2s, box-shadow 0.2s;
-            position: relative;
-            border: 1px solid #333;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            height: 240px; /* Fixed height for uniformity */
-        }
-
-        .store-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
-            border-color: #444;
-        }
-
-        /* ICONS */
-        .icon-shield { font-size: 40px; color: var(--accent); margin-bottom: 10px; }
-        .icon-gem { font-size: 40px; color: var(--accent); margin-bottom: 10px; }
-
-        /* TEXT */
-        .card-title { font-size: 18px; font-weight: bold; margin-bottom: 5px; color: white; }
-        .card-price { font-size: 14px; color: var(--accent); font-weight: bold; margin-bottom: 20px; }
-        
-        /* BUTTONS */
-        .btn-buy {
-            background-color: var(--accent);
-            color: #000;
-            font-weight: bold;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            width: 100%;
-            transition: background 0.2s;
-            text-transform: uppercase;
-            font-size: 13px;
-        }
-        .btn-buy:hover { background-color: var(--accent-hover); }
-        .btn-buy:disabled { background-color: #555; cursor: not-allowed; color: #888; }
-
-        /* TAGS */
-        .tag-popular, .tag-value {
-            position: absolute;
-            top: -12px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: #22d3ee; /* Cyan for popular */
-            color: #000;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        .tag-value { background-color: #a3e635; } /* Lime for value */
-
-        .gift-btn {
-            background-color: #333;
-            color: white;
-            border: none;
-            width: 40px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-left: 5px;
-        }
-        .action-row { display: flex; margin-top: auto; }
-    </style>
 </head>
 <body>
 
     <header>
-        <a href="index.html" class="logo"><img src="assets/logo.png" alt="Logo"></a>
+        <a href="index.html" class="logo"><img src="assets/logo.png" alt="Classic Rust Logo"></a>
+         <div class="menu-toggle">
+        <span></span>
+        <span></span>
+        <span></span>
+    </div>
         <nav>
             <ul>
                 <li><a href="servers.html">Servers</a></li>
-                <li><a href="store.html" class="active">Store</a></li>
-                <li><a href="create-ticket.html">Support</a></li>
-                <li><a href="profile.html">Profile</a></li>
+                <li><a href="store.html">Store</a></li>
+                <li><a href="create-ticket.html">Create a Ticket</a></li>
+                <li><a href="profile.html">My Profile</a></li>
             </ul>
         </nav>
-        <div id="auth-section">
-            <a href="/auth/steam" class="steam-login">Sign in with Steam</a>
+       <div id="auth-section">
+            <a href="/auth/steam" class="steam-login">
+                <img src="assets/steam.png" alt="Steam">
+                Sign in with Steam
+            </a>
         </div>
     </header>
     
-    <div class="container" style="max-width: 1200px; padding-top: 40px;">
-
-        <!-- RANKS SECTION -->
-        <div class="section-header">
-            <div class="section-line"></div> Ranks
-        </div>
-        <span class="subtitle">You will receive your rank on all servers. (30 Hour Cooldown)</span>
-
-        <div class="grid-container">
-            <!-- Rank: VIP -->
-            <div class="store-card">
-                <div class="icon-shield">🛡️</div>
-                <div class="card-title">VIP</div>
-                <div class="card-price">10 USD</div>
-                <button class="btn-buy" onclick="buyRank('vip')">View Details / Buy</button>
+    <div class="container">
+        <h2 style="text-align: center; border: none;">Store Packages</h2>
+        <p style="text-align: center; color: #aaa; margin-bottom: 40px;">Select a package to enhance your experience.</p>
+        
+        <div class="store-grid">
+            <div class="card">
+                <h3 style="color: #aaa;">VIP</h3>
+                <p>Perfect for casual players.<br><br>• Skip Queue<br>• Skinbox Access<br>• 2x Kits</p>
+                <h4>\$10.00 <span style="font-size: 14px; color: #666;">/ mo</span></h4>
+                <a href="#" class="btn btn-primary" style="background-color: transparent; border: 1px solid var(--primary-orange); color: var(--primary-orange);">Buy Now</a>
             </div>
 
-            <!-- Rank: ELITE -->
-            <div class="store-card">
-                <div class="icon-shield">🛡️</div>
-                <div class="card-title">ELITE</div>
-                <div class="card-price">20 USD</div>
-                <button class="btn-buy" onclick="buyRank('elite')">View Details / Buy</button>
+            <div class="card featured">
+                <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary-orange); color: black; padding: 2px 10px; font-size: 10px; font-weight: bold; border-radius: 4px; text-transform: uppercase;">Most Popular</div>
+                <h3 style="color: var(--primary-orange);">MVP</h3>
+                <p>The best value for serious players.<br><br>• <b>All VIP Perks</b><br>• Priority Support<br>• Exclusive Discord Role<br>• Furnace Splitter</p>
+                <h4>\$25.00 <span style="font-size: 14px; color: #666;">/ mo</span></h4>
+                <a href="#" class="btn btn-primary">Buy Now</a>
             </div>
 
-            <!-- Rank: SOLDIER (Most Popular) -->
-            <div class="store-card" style="border: 1px solid var(--accent);">
-                <div class="tag-popular">Most Popular</div>
-                <div class="icon-shield">🛡️</div>
-                <div class="card-title">SOLDIER</div>
-                <div class="card-price">40 USD</div>
-                <button class="btn-buy" onclick="buyRank('soldier')">View Details / Buy</button>
-            </div>
-
-            <!-- Rank: JUGGERNAUT -->
-            <div class="store-card">
-                <div class="icon-shield">🛡️</div>
-                <div class="card-title">JUGGERNAUT</div>
-                <div class="card-price">60 USD</div>
-                <button class="btn-buy" onclick="buyRank('juggernaut')">View Details / Buy</button>
-            </div>
-
-            <!-- Rank: OVERLORD -->
-            <div class="store-card">
-                <div class="icon-shield">🛡️</div>
-                <div class="card-title">OVERLORD</div>
-                <div class="card-price">100 USD</div>
-                <button class="btn-buy" onclick="buyRank('overlord')">View Details / Buy</button>
+            <div class="card">
+                <h3 style="color: #e74c3c;">Elite</h3>
+                <p>Ultimate status and dominance.<br><br>• <b>All MVP Perks</b><br>• Custom Chat Tag<br>• Reserved Slot<br>• Sign Artist</p>
+                <h4>\$50.00 <span style="font-size: 14px; color: #666;">/ lifetime</span></h4>
+                <a href="#" class="btn btn-primary" style="background-color: transparent; border: 1px solid var(--primary-orange); color: var(--primary-orange);">Buy Now</a>
             </div>
         </div>
-
-        <!-- GEMS SECTION -->
-        <div class="section-header">
-            <div class="section-line"></div> Gems
-        </div>
-        <span class="subtitle">Current Balance: <span id="gem-balance" style="color: white; font-weight: bold;">---</span></span>
-
-        <div class="grid-container">
-            <div class="store-card">
-                <div class="icon-gem">💎</div>
-                <div class="card-title">400 Gems</div>
-                <div class="card-price">5 USD</div>
-                <div class="action-row">
-                    <button class="btn-buy" onclick="buyGems(400)">Add to Cart</button>
-                    <button class="gift-btn">🎁</button>
-                </div>
-            </div>
-
-            <div class="store-card">
-                <div class="icon-gem">💎</div>
-                <div class="card-title">1,000 Gems</div>
-                <div class="card-price">10 USD</div>
-                <div class="action-row">
-                    <button class="btn-buy" onclick="buyGems(1000)">Add to Cart</button>
-                    <button class="gift-btn">🎁</button>
-                </div>
-            </div>
-
-            <div class="store-card">
-                <div class="icon-gem">💎</div>
-                <div class="card-title">2,100 Gems</div>
-                <div class="card-price">20 USD</div>
-                <div class="action-row">
-                    <button class="btn-buy" onclick="buyGems(2100)">Add to Cart</button>
-                    <button class="gift-btn">🎁</button>
-                </div>
-            </div>
-
-            <div class="store-card">
-                <div class="tag-value">Best Value</div>
-                <div class="icon-gem">💎</div>
-                <div class="card-title">12,000 Gems</div>
-                <div class="card-price">100 USD</div>
-                <div class="action-row">
-                    <button class="btn-buy" onclick="buyGems(12000)">Add to Cart</button>
-                    <button class="gift-btn">🎁</button>
-                </div>
-            </div>
-        </div>
-
     </div>
 
+    <footer>
+        <div class="footer-content">
+            <div class="footer-left">
+                <p>&copy; 2026 Classic Rust. All rights reserved.</p>
+                <p class="credits">Designed by <a href="https://aetheriwebdesign.com/" target="_blank">Aetheri Web Design</a></p>
+            </div>
+            <div class="footer-right">
+                <a href="#">Terms of Service</a>
+                <a href="#">Privacy Policy</a>
+                <a href="https://discord.gg/QdQUvPvg" class="btn btn-discord-small">
+                    <img src="assets/discord.png" alt="Discord" style="width: 20px; height: 20px;">
+                    Join Discord
+                </a>
+            </div>
+        </div>
+    </footer>
+
     <script src="auth.js"></script>
-    <script>
-        let currentUser = null;
-
-        document.addEventListener("DOMContentLoaded", () => {
-            fetch('/user')
-            .then(r => r.json())
-            .then(user => {
-                currentUser = user;
-                if(user && user.id) {
-                    document.getElementById('gem-balance').innerText = user.gems.toLocaleString();
-                    
-                    // Disable buttons for owned ranks
-                    if(user.ranks) {
-                        user.ranks.forEach(rank => {
-                            const btns = document.querySelectorAll(`button[onclick="buyRank('${rank}')"]`);
-                            btns.forEach(btn => {
-                                btn.disabled = true;
-                                btn.innerText = "OWNED";
-                                btn.style.backgroundColor = "#333";
-                            });
-                        });
-                    }
-                } else {
-                    document.getElementById('gem-balance').innerText = "Login to see";
-                }
-            });
-        });
-
-        function buyRank(rankName) {
-            if(!currentUser || !currentUser.id) return alert("Please login with Steam first.");
-            
-            if(!confirm(`SIMULATION: Purchase ${rankName.toUpperCase()}?`)) return;
-
-            fetch('/api/store/buy-rank', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ rank: rankName })
-            })
-            .then(r => r.json())
-            .then(data => {
-                if(data.success) {
-                    alert("Success! You can now redeem this kit in-game.");
-                    location.reload();
-                } else {
-                    alert(data.error || "Failed");
-                }
-            });
-        }
-
-        function buyGems(amount) {
-            if(!currentUser || !currentUser.id) return alert("Please login with Steam first.");
-
-            if(!confirm(`SIMULATION: Buy ${amount} gems?`)) return;
-
-            fetch('/api/store/buy-gems', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ amount: amount })
-            })
-            .then(r => r.json())
-            .then(data => {
-                if(data.success) {
-                    alert("Gems added!");
-                    location.reload();
-                } else {
-                    alert("Failed");
-                }
-            });
-        }
-    </script>
+    <script src="loader.js"></script>
+    <script src="mobile.js"></script>
 </body>
 </html>
