@@ -17,10 +17,44 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-// --- DB SCHEMA CHECK ---
-pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS ranks TEXT[] DEFAULT '{}'")
-    .then(() => console.log("Database schema checked: ranks column ready."))
-    .catch(err => console.error("DB Schema Error:", err));
+// --- DB SCHEMA INITIALIZATION ---
+const initDb = async () => {
+    try {
+        // 1. Users Table Update
+        await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS ranks TEXT[] DEFAULT '{}'");
+        
+        // 2. Create Tickets Table
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS tickets (
+                id SERIAL PRIMARY KEY,
+                steamid TEXT NOT NULL,
+                username TEXT,
+                avatar TEXT,
+                category TEXT,
+                subject TEXT,
+                status TEXT DEFAULT 'Open',
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+
+        // 3. Create Messages Table
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                ticket_id INTEGER REFERENCES tickets(id),
+                sender_steamid TEXT,
+                sender_name TEXT,
+                sender_avatar TEXT,
+                content TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        console.log("Database tables verified/created.");
+    } catch (err) {
+        console.error("DB Init Error:", err);
+    }
+};
+initDb();
 
 // --- CONFIGURATION ---
 app.set('trust proxy', 1);
@@ -46,12 +80,14 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// FIX: Dynamic secure cookie setting to prevent login loops
+const isProduction = process.env.NODE_ENV === 'production';
 app.use(session({
     secret: 'super_secret_rust_key_12345',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true, 
+        secure: isProduction, // Only true if in production
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000 
     }
@@ -68,23 +104,18 @@ async function checkGroupMembership(userSteamId) {
     try {
         const apiRes = await axios.get(`http://api.steampowered.com/ISteamUser/GetUserGroupList/v1/?key=${STEAM_API_KEY}&steamid=${userSteamId}`);
         const groups = apiRes.data.response.groups || [];
-        const isMember = groups.some(g => g.gid === STEAM_GROUP_ID);
-        if (isMember) return true;
+        if (groups.some(g => g.gid === STEAM_GROUP_ID)) return true;
     } catch (e) {}
 
     try {
         const xmlUrl = `https://steamcommunity.com/groups/${STEAM_GROUP_URL_NAME}/memberslistxml/?xml=1`;
         const xmlRes = await axios.get(xmlUrl);
-        if (xmlRes.data.includes(`<steamID64>${userSteamId}</steamID64>`)) {
-            return true;
-        }
-    } catch (e) {
-        console.error("Group Check Error:", e.message);
-    }
+        if (xmlRes.data.includes(`<steamID64>${userSteamId}</steamID64>`)) return true;
+    } catch (e) { console.error("Group Check Error:", e.message); }
     return false;
 }
 
-// --- 1. STEAM AUTH ---
+// --- AUTH ---
 passport.use(new SteamStrategy({
     returnURL: `${DOMAIN}/auth/steam/return`,
     realm: `${DOMAIN}/`,
@@ -101,7 +132,6 @@ passport.use(new SteamStrategy({
   }
 ));
 
-// --- 2. DISCORD AUTH ---
 passport.use(new DiscordStrategy({
     clientID: DISCORD_CLIENT_ID,
     clientSecret: DISCORD_CLIENT_SECRET,
@@ -109,55 +139,28 @@ passport.use(new DiscordStrategy({
     scope: ['identify', 'guilds.join'],
     passReqToCallback: true 
 }, async (req, accessToken, refreshToken, profile, done) => {
-    
     if (!req.user) return done(new Error("You must be logged into Steam first!"));
-
     try {
-        const existingCheck = await pool.query(
-            `SELECT steam_id FROM users WHERE discord_id = \\$1`,
-            [profile.id]
-        );
-
-        if (existingCheck.rows.length > 0) {
-            const existingSteamId = existingCheck.rows[0].steam_id;
-            if (existingSteamId !== req.user.id) {
-                return done(null, false, { message: 'duplicate' });
-            }
+        const existingCheck = await pool.query(`SELECT steam_id FROM users WHERE discord_id = \\$1`, [profile.id]);
+        if (existingCheck.rows.length > 0 && existingCheck.rows[0].steam_id !== req.user.id) {
+            return done(null, false, { message: 'duplicate' });
         }
-
-        await pool.query(
-            `UPDATE users SET discord_id = \\$1, discord_username = \\$2 WHERE steam_id = \\$3`,
-            [profile.id, profile.username, req.user.id]
-        );
-        
+        await pool.query(`UPDATE users SET discord_id = \\$1, discord_username = \\$2 WHERE steam_id = \\$3`, [profile.id, profile.username, req.user.id]);
         try {
-            await axios.put(
-                `https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${profile.id}`,
-                { access_token: accessToken },
-                { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } }
-            );
+            await axios.put(`https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${profile.id}`, { access_token: accessToken }, { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } });
         } catch (e) { }
-
         return done(null, req.user);
-    } catch (err) {
-        return done(err, null);
-    }
+    } catch (err) { return done(err, null); }
 }));
 
-// --- AUTH ROUTES ---
 app.get('/auth/steam', passport.authenticate('steam'));
 app.get('/auth/steam/return', passport.authenticate('steam', { failureRedirect: '/' }), (req, res) => res.redirect('/index.html'));
-
 app.get('/auth/discord', passport.authenticate('discord'));
-
 app.get('/auth/discord/callback', (req, res, next) => {
     passport.authenticate('discord', (err, user, info) => {
         if (err) return next(err);
-        if (!user && info && info.message === 'duplicate') {
-            return res.redirect('/profile.html?error=discord_in_use');
-        }
+        if (!user && info?.message === 'duplicate') return res.redirect('/profile.html?error=discord_in_use');
         if (!user) return res.redirect('/profile.html?error=unknown');
-
         req.logIn(user, (err) => {
             if (err) return next(err);
             return res.redirect('/profile.html');
@@ -168,25 +171,15 @@ app.get('/auth/discord/callback', (req, res, next) => {
 app.post('/auth/discord/unlink', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Not logged in" });
     try {
-        await pool.query(
-            `UPDATE users SET discord_id = NULL, discord_username = NULL WHERE steam_id = \\$1`,
-            [req.user.id]
-        );
+        await pool.query(`UPDATE users SET discord_id = NULL, discord_username = NULL WHERE steam_id = \\$1`, [req.user.id]);
         res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: "Database error" });
-    }
+    } catch (err) { res.status(500).json({ error: "Database error" }); }
 });
 
-// --- USER DATA ---
 app.get('/user', async (req, res) => {
     if(!req.user) return res.json(null);
     const isAdmin = ADMIN_IDS.includes(req.user.id);
-
-    let discordInfo = null;
-    let gemBalance = 0;
-    let ranks = [];
-
+    let discordInfo = null, gemBalance = 0, ranks = [];
     try {
         const dbRes = await pool.query('SELECT discord_username, gems, ranks FROM users WHERE steam_id = \\$1', [req.user.id]);
         if (dbRes.rows.length > 0) {
@@ -195,96 +188,62 @@ app.get('/user', async (req, res) => {
             ranks = dbRes.rows[0].ranks || [];
         }
     } catch(e) { console.error("DB Error:", e); }
-
     const inSteamGroup = await checkGroupMembership(req.user.id);
-
-    res.json({ 
-        ...req.user, 
-        isAdmin, 
-        discord: discordInfo,
-        gems: gemBalance, 
-        ranks: ranks,
-        inSteamGroup: inSteamGroup 
-    });
+    res.json({ ...req.user, isAdmin, discord: discordInfo, gems: gemBalance, ranks: ranks, inSteamGroup: inSteamGroup });
 });
 
 app.get('/logout', (req, res) => {
-    req.logout(() => {
-        req.session.destroy(() => res.redirect('/index.html'));
-    });
+    req.logout(() => { req.session.destroy(() => res.redirect('/index.html')); });
 });
 
-// --- STORE API (WEBSITE) ---
+// --- STORE API ---
 app.post('/api/store/buy-rank', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Login required" });
     const { rank } = req.body;
     if(!rank) return res.status(400).json({error: "No rank specified"});
-
     try {
         const check = await pool.query('SELECT ranks FROM users WHERE steam_id = \\$1', [req.user.id]);
         const currentRanks = check.rows[0].ranks || [];
-
         if(currentRanks.includes(rank)) return res.json({ success: false, error: "Already owned" });
-
-        await pool.query(
-            "UPDATE users SET ranks = array_append(COALESCE(ranks, '{}'), \\$1) WHERE steam_id = \\$2",
-            [rank, req.user.id]
-        );
+        await pool.query("UPDATE users SET ranks = array_append(COALESCE(ranks, '{}'), \\$1) WHERE steam_id = \\$2", [rank, req.user.id]);
         res.json({ success: true, message: `Purchased ${rank.toUpperCase()}!` });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "DB Error" });
-    }
+    } catch (err) { console.error(err); res.status(500).json({ error: "DB Error" }); }
 });
 
 app.post('/api/store/buy-gems', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Login required" });
     const { amount } = req.body;
     if(!amount || isNaN(amount)) return res.status(400).json({error: "Invalid amount"});
-
     try {
         await pool.query('UPDATE users SET gems = gems + \\$1 WHERE steam_id = \\$2', [amount, req.user.id]);
         res.json({ success: true, message: `Added ${amount} gems!` });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "DB Error" });
-    }
+    } catch (err) { console.error(err); res.status(500).json({ error: "DB Error" }); }
 });
 
-// --- SERVER INTERACTION API (OXIDE) ---
+// --- SERVER API ---
 app.post('/api/server/redeem', async (req, res) => {
     try {
         const { steamId, kit } = req.query;
         if (!steamId || !kit) return res.status(400).send("Missing Params");
-
         const rankKits = ['vip', 'elite', 'soldier', 'juggernaut', 'overlord'];
         if (rankKits.includes(kit)) {
             const userRes = await pool.query('SELECT ranks FROM users WHERE steam_id = \\$1', [steamId]);
             const userRanks = (userRes.rows[0] && userRes.rows[0].ranks) ? userRes.rows[0].ranks : [];
-            
             if (userRanks.includes(kit)) return res.status(200).send("OK");
             else return res.status(403).send("LOCKED");
         }
-
         if (kit === 'discord' || kit === 'discordbuild') {
             const userRes = await pool.query('SELECT discord_id FROM users WHERE steam_id = \\$1', [steamId]);
             if (!userRes.rows[0]?.discord_id) return res.status(403).send("FAIL_LINK"); 
             try {
-                await axios.get(
-                    `https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${userRes.rows[0].discord_id}`,
-                    { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } }
-                );
+                await axios.get(`https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${userRes.rows[0].discord_id}`, { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } });
                 return res.status(200).send("OK");
-            } catch (discordErr) {
-                return res.status(403).send("FAIL_GUILD");
-            }
+            } catch (discordErr) { return res.status(403).send("FAIL_GUILD"); }
         }
-
         if (kit === 'steam') {
             const inGroup = await checkGroupMembership(steamId);
             return inGroup ? res.status(200).send("OK") : res.status(403).send("FAIL_STEAM_GROUP");
         }
-
         res.status(200).send("OK");
     } catch (err) { res.status(500).send("ERROR"); }
 });
@@ -292,54 +251,30 @@ app.post('/api/server/redeem', async (req, res) => {
 app.get('/api/server/balance', async (req, res) => {
     const { steamId } = req.query;
     if (!steamId) return res.send("0");
-
     try {
         const result = await pool.query('SELECT gems FROM users WHERE steam_id = \\$1', [steamId]);
-        if (result.rows.length > 0) {
-            return res.send(result.rows[0].gems.toString());
-        }
+        if (result.rows.length > 0) return res.send(result.rows[0].gems.toString());
         return res.send("0");
-    } catch (err) {
-        console.error(err);
-        return res.send("0");
-    }
+    } catch (err) { return res.send("0"); }
 });
 
 app.post('/api/server/spend', async (req, res) => {
     const { steamId, cost } = req.body;
     if (!steamId || !cost) return res.status(400).send("ERROR");
-
     const client = await pool.connect();
     try {
-        await client.query('BEGIN'); 
-
+        await client.query('BEGIN');
         const resCheck = await client.query('SELECT gems FROM users WHERE steam_id = \\$1 FOR UPDATE', [steamId]);
-        
-        if (resCheck.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.send("NO_USER");
-        }
-
+        if (resCheck.rows.length === 0) { await client.query('ROLLBACK'); return res.send("NO_USER"); }
         const currentBalance = resCheck.rows[0].gems;
-        if (currentBalance < cost) {
-            await client.query('ROLLBACK');
-            return res.send("INSUFFICIENT_FUNDS");
-        }
-
+        if (currentBalance < cost) { await client.query('ROLLBACK'); return res.send("INSUFFICIENT_FUNDS"); }
         await client.query('UPDATE users SET gems = gems - \\$1 WHERE steam_id = \\$2', [cost, steamId]);
         await client.query('COMMIT'); 
         return res.send("SUCCESS");
-
-    } catch (err) {
-        await client.query('ROLLBACK');
-        console.error(err);
-        return res.send("ERROR");
-    } finally {
-        client.release();
-    }
+    } catch (err) { await client.query('ROLLBACK'); return res.send("ERROR"); } finally { client.release(); }
 });
 
-// --- TICKET API ---
+// --- TICKET API (FIXED) ---
 app.post('/api/tickets', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Login required' });
     const { category, subject, description } = req.body;
@@ -347,20 +282,22 @@ app.post('/api/tickets', async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+        // FIX: Ensure columns match DB schema (lowercase)
         const ticketRes = await client.query(
-            'INSERT INTO tickets (steamId, username, avatar, category, subject) VALUES (\\$1, \\$2, \\$3, \\$4, \\$5) RETURNING id',
+            'INSERT INTO tickets (steamid, username, avatar, category, subject) VALUES (\\$1, \\$2, \\$3, \\$4, \\$5) RETURNING id',
             [req.user.id, req.user.displayName, req.user.photos[2].value, category, subject]
         );
         const ticketId = ticketRes.rows[0].id;
         
         await client.query(
-            'INSERT INTO messages (ticket_id, sender_steamId, sender_name, sender_avatar, content) VALUES (\\$1, \\$2, \\$3, \\$4, \\$5)',
+            'INSERT INTO messages (ticket_id, sender_steamid, sender_name, sender_avatar, content) VALUES (\\$1, \\$2, \\$3, \\$4, \\$5)',
             [ticketId, req.user.id, req.user.displayName, req.user.photos[2].value, description]
         );
         await client.query('COMMIT');
         res.json({ success: true });
     } catch (e) {
         await client.query('ROLLBACK');
+        console.error("Ticket Create Error:", e);
         res.status(500).json({ error: 'Database error' });
     } finally {
         client.release();
@@ -370,37 +307,22 @@ app.post('/api/tickets', async (req, res) => {
 app.get('/api/my-tickets', async (req, res) => {
     if (!req.user) return res.status(401).json([]);
     try {
-        const result = await pool.query('SELECT * FROM tickets WHERE steamId = \\$1 ORDER BY id DESC', [req.user.id]);
+        // FIX: Match column name steamid
+        const result = await pool.query('SELECT * FROM tickets WHERE steamid = \\$1 ORDER BY id DESC', [req.user.id]);
         res.json(result.rows);
-    } catch (err) { res.json([]); }
+    } catch (err) { console.error(err); res.json([]); }
 });
 
-// *** NEW ADMIN ROUTE ***
+// --- ADMIN API ---
 app.get('/api/admin/tickets', async (req, res) => {
-    // 1. Check if user is logged in and in the ADMIN_IDS list
-    if (!req.user || !ADMIN_IDS.includes(req.user.id)) {
-        return res.status(403).json({ error: "Unauthorized access" });
-    }
-
+    if (!req.user || !ADMIN_IDS.includes(req.user.id)) return res.status(403).json({ error: "Unauthorized access" });
     try {
-        // 2. Fetch ALL tickets. 
-        // SORT: Open (1) and Answered (2) tickets appear first, then Closed (3). Then sort by ID desc (newest).
-        const query = `
-            SELECT * FROM tickets 
-            ORDER BY 
-            CASE 
-                WHEN status = 'Open' THEN 1 
-                WHEN status = 'Answered' THEN 2 
-                ELSE 3 
-            END, 
-            id DESC
-        `;
-        
+        const query = `SELECT * FROM tickets ORDER BY CASE WHEN status = 'Open' THEN 1 WHEN status = 'Answered' THEN 2 ELSE 3 END, id DESC`;
         const result = await pool.query(query);
         res.json(result.rows);
     } catch (err) {
-        console.error("Admin Dashboard Error:", err);
-        res.status(500).json({ error: "Database error fetching tickets" });
+        console.error("Admin Fetch Error:", err);
+        res.status(500).json({ error: "Database error" });
     }
 });
 
@@ -434,7 +356,7 @@ app.post('/api/ticket/:id/reply', async (req, res) => {
         if (ticketCheck.rows[0].status === 'Closed') return res.status(400).json({ error: "Ticket is closed." });
 
         await pool.query(
-            'INSERT INTO messages (ticket_id, sender_steamId, sender_name, sender_avatar, content) VALUES (\\$1, \\$2, \\$3, \\$4, \\$5)',
+            'INSERT INTO messages (ticket_id, sender_steamid, sender_name, sender_avatar, content) VALUES (\\$1, \\$2, \\$3, \\$4, \\$5)',
             [ticketId, req.user.id, req.user.displayName, req.user.photos[2].value, req.body.content]
         );
         const newStatus = isAdminUser ? 'Answered' : 'Open';
@@ -443,21 +365,15 @@ app.post('/api/ticket/:id/reply', async (req, res) => {
     } catch (err) { res.status(500).send("Error"); }
 });
 
-// --- SERVER INFO API ---
 app.get('/api/servers', async (req, res) => {
     try {
         const promises = SERVERS.map(server =>
             GameDig.query({ type: server.type, host: server.ip, port: server.port, maxAttempts: 2 })
-            .then((state) => ({
-                name: server.name, ip: server.ip, port: server.port, map: state.map, players: state.players.length, maxPlayers: state.maxplayers, status: 'Online'
-            })).catch((error) => ({
-                name: server.name, ip: server.ip, port: server.port, map: "N/A", players: 0, maxPlayers: 0, status: 'Offline'
-            }))
+            .then((state) => ({ name: server.name, ip: server.ip, port: server.port, map: state.map, players: state.players.length, maxPlayers: state.maxplayers, status: 'Online' }))
+            .catch(() => ({ name: server.name, ip: server.ip, port: server.port, map: "N/A", players: 0, maxPlayers: 0, status: 'Offline' }))
         );
         res.json(await Promise.all(promises));
     } catch (err) { res.json([]); }
 });
 
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
+app.listen(port, () => console.log(`Server running on port ${port}`));
