@@ -1,5 +1,6 @@
 const express = require('express');
 const session = require('express-session');
+const pgSession = require('connect-pg-simple')(session); // <--- ADD THIS
 const passport = require('passport');
 const SteamStrategy = require('passport-steam').Strategy;
 const DiscordStrategy = require('passport-discord').Strategy;
@@ -7,7 +8,6 @@ const { Pool } = require('pg');
 const { GameDig } = require('gamedig');
 const path = require('path');
 const axios = require('axios');
-const pgSession = require('connect-pg-simple')(session);
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -50,16 +50,16 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
     store: new pgSession({
-        pool : pool,                // Use your existing Postgres pool
-        tableName : 'session',      // We will create this table in Step 2
-        createTableIfMissing: true  // Automatically creates the table
+        pool : pool,                // Use your existing Postgres connection
+        tableName : 'session',      // We will create this table automatically
+        createTableIfMissing: true  // This ensures the table exists
     }),
     secret: 'super_secret_rust_key_12345',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        // IMPORTANT: If testing on localhost (HTTP), secure MUST be false.
-        // If on Render (HTTPS), secure MUST be true.
+        // FIX: Only require HTTPS if we are in production (Render). 
+        // This makes it work on Localhost AND Render.
         secure: process.env.NODE_ENV === 'production', 
         httpOnly: true,
         maxAge: 30 * 24 * 60 * 60 * 1000 // 30 Days
@@ -392,6 +392,9 @@ app.get('/api/admin/tickets', async (req, res) => {
 });
 
 app.post('/api/tickets', async (req, res) => {
+    // DEBUG LOG: See if the server recognizes the user
+    console.log("Ticket Attempt. User:", req.user ? req.user.id : "Not Logged In");
+
     if (!req.user) return res.status(401).json({ error: 'Login required' });
     const { category, subject, description } = req.body;
     
