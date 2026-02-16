@@ -18,7 +18,6 @@ const pool = new Pool({
 });
 
 // --- DB SCHEMA CHECK ---
-// Ensure the 'ranks' column exists to prevent errors on old users
 pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS ranks TEXT[] DEFAULT '{}'")
     .then(() => console.log("Database schema checked: ranks column ready."))
     .catch(err => console.error("DB Schema Error:", err));
@@ -93,9 +92,8 @@ passport.use(new SteamStrategy({
   },
   async (identifier, profile, done) => {
       try {
-          // Initialize user with empty ranks array if new
           await pool.query(
-              `INSERT INTO users (steam_id, gems, ranks) VALUES (\$1, 0, '{}') ON CONFLICT (steam_id) DO NOTHING`,
+              `INSERT INTO users (steam_id, gems, ranks) VALUES (\\$1, 0, '{}') ON CONFLICT (steam_id) DO NOTHING`,
               [profile.id]
           );
       } catch (err) { console.error("DB Save Error:", err); }
@@ -116,7 +114,7 @@ passport.use(new DiscordStrategy({
 
     try {
         const existingCheck = await pool.query(
-            `SELECT steam_id FROM users WHERE discord_id = \$1`,
+            `SELECT steam_id FROM users WHERE discord_id = \\$1`,
             [profile.id]
         );
 
@@ -128,7 +126,7 @@ passport.use(new DiscordStrategy({
         }
 
         await pool.query(
-            `UPDATE users SET discord_id = \$1, discord_username = \$2 WHERE steam_id = \$3`,
+            `UPDATE users SET discord_id = \\$1, discord_username = \\$2 WHERE steam_id = \\$3`,
             [profile.id, profile.username, req.user.id]
         );
         
@@ -171,7 +169,7 @@ app.post('/auth/discord/unlink', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Not logged in" });
     try {
         await pool.query(
-            `UPDATE users SET discord_id = NULL, discord_username = NULL WHERE steam_id = \$1`,
+            `UPDATE users SET discord_id = NULL, discord_username = NULL WHERE steam_id = \\$1`,
             [req.user.id]
         );
         res.json({ success: true });
@@ -190,7 +188,7 @@ app.get('/user', async (req, res) => {
     let ranks = [];
 
     try {
-        const dbRes = await pool.query('SELECT discord_username, gems, ranks FROM users WHERE steam_id = \$1', [req.user.id]);
+        const dbRes = await pool.query('SELECT discord_username, gems, ranks FROM users WHERE steam_id = \\$1', [req.user.id]);
         if (dbRes.rows.length > 0) {
             discordInfo = dbRes.rows[0].discord_username;
             gemBalance = dbRes.rows[0].gems || 0;
@@ -217,22 +215,19 @@ app.get('/logout', (req, res) => {
 });
 
 // --- STORE API (WEBSITE) ---
-
-// 1. Buy Rank (FIXED: Handles NULL arrays)
 app.post('/api/store/buy-rank', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Login required" });
     const { rank } = req.body;
     if(!rank) return res.status(400).json({error: "No rank specified"});
 
     try {
-        const check = await pool.query('SELECT ranks FROM users WHERE steam_id = \$1', [req.user.id]);
+        const check = await pool.query('SELECT ranks FROM users WHERE steam_id = \\$1', [req.user.id]);
         const currentRanks = check.rows[0].ranks || [];
 
         if(currentRanks.includes(rank)) return res.json({ success: false, error: "Already owned" });
 
-        // IMPORTANT: COALESCE ensures we don't try to append to a NULL value
         await pool.query(
-            "UPDATE users SET ranks = array_append(COALESCE(ranks, '{}'), \$1) WHERE steam_id = \$2",
+            "UPDATE users SET ranks = array_append(COALESCE(ranks, '{}'), \\$1) WHERE steam_id = \\$2",
             [rank, req.user.id]
         );
         res.json({ success: true, message: `Purchased ${rank.toUpperCase()}!` });
@@ -242,14 +237,13 @@ app.post('/api/store/buy-rank', async (req, res) => {
     }
 });
 
-// 2. Buy Gems
 app.post('/api/store/buy-gems', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Login required" });
     const { amount } = req.body;
     if(!amount || isNaN(amount)) return res.status(400).json({error: "Invalid amount"});
 
     try {
-        await pool.query('UPDATE users SET gems = gems + \$1 WHERE steam_id = \$2', [amount, req.user.id]);
+        await pool.query('UPDATE users SET gems = gems + \\$1 WHERE steam_id = \\$2', [amount, req.user.id]);
         res.json({ success: true, message: `Added ${amount} gems!` });
     } catch (err) {
         console.error(err);
@@ -258,26 +252,22 @@ app.post('/api/store/buy-gems', async (req, res) => {
 });
 
 // --- SERVER INTERACTION API (OXIDE) ---
-
-// 1. Redeem Kit
 app.post('/api/server/redeem', async (req, res) => {
     try {
         const { steamId, kit } = req.query;
         if (!steamId || !kit) return res.status(400).send("Missing Params");
 
-        // CHECK 1: Rank Kits (DB Check)
         const rankKits = ['vip', 'elite', 'soldier', 'juggernaut', 'overlord'];
         if (rankKits.includes(kit)) {
-            const userRes = await pool.query('SELECT ranks FROM users WHERE steam_id = \$1', [steamId]);
+            const userRes = await pool.query('SELECT ranks FROM users WHERE steam_id = \\$1', [steamId]);
             const userRanks = (userRes.rows[0] && userRes.rows[0].ranks) ? userRes.rows[0].ranks : [];
             
             if (userRanks.includes(kit)) return res.status(200).send("OK");
             else return res.status(403).send("LOCKED");
         }
 
-        // CHECK 2: Discord
         if (kit === 'discord' || kit === 'discordbuild') {
-            const userRes = await pool.query('SELECT discord_id FROM users WHERE steam_id = \$1', [steamId]);
+            const userRes = await pool.query('SELECT discord_id FROM users WHERE steam_id = \\$1', [steamId]);
             if (!userRes.rows[0]?.discord_id) return res.status(403).send("FAIL_LINK"); 
             try {
                 await axios.get(
@@ -290,7 +280,6 @@ app.post('/api/server/redeem', async (req, res) => {
             }
         }
 
-        // CHECK 3: Steam Group
         if (kit === 'steam') {
             const inGroup = await checkGroupMembership(steamId);
             return inGroup ? res.status(200).send("OK") : res.status(403).send("FAIL_STEAM_GROUP");
@@ -300,13 +289,12 @@ app.post('/api/server/redeem', async (req, res) => {
     } catch (err) { res.status(500).send("ERROR"); }
 });
 
-// 2. Get Balance
 app.get('/api/server/balance', async (req, res) => {
     const { steamId } = req.query;
     if (!steamId) return res.send("0");
 
     try {
-        const result = await pool.query('SELECT gems FROM users WHERE steam_id = \$1', [steamId]);
+        const result = await pool.query('SELECT gems FROM users WHERE steam_id = \\$1', [steamId]);
         if (result.rows.length > 0) {
             return res.send(result.rows[0].gems.toString());
         }
@@ -317,16 +305,15 @@ app.get('/api/server/balance', async (req, res) => {
     }
 });
 
-// 3. Spend Gems (Transaction)
 app.post('/api/server/spend', async (req, res) => {
     const { steamId, cost } = req.body;
     if (!steamId || !cost) return res.status(400).send("ERROR");
 
     const client = await pool.connect();
     try {
-        await client.query('BEGIN'); // Start Transaction
+        await client.query('BEGIN'); 
 
-        const resCheck = await client.query('SELECT gems FROM users WHERE steam_id = \$1 FOR UPDATE', [steamId]);
+        const resCheck = await client.query('SELECT gems FROM users WHERE steam_id = \\$1 FOR UPDATE', [steamId]);
         
         if (resCheck.rows.length === 0) {
             await client.query('ROLLBACK');
@@ -339,7 +326,7 @@ app.post('/api/server/spend', async (req, res) => {
             return res.send("INSUFFICIENT_FUNDS");
         }
 
-        await client.query('UPDATE users SET gems = gems - \$1 WHERE steam_id = \$2', [cost, steamId]);
+        await client.query('UPDATE users SET gems = gems - \\$1 WHERE steam_id = \\$2', [cost, steamId]);
         await client.query('COMMIT'); 
         return res.send("SUCCESS");
 
@@ -361,13 +348,13 @@ app.post('/api/tickets', async (req, res) => {
     try {
         await client.query('BEGIN');
         const ticketRes = await client.query(
-            'INSERT INTO tickets (steamId, username, avatar, category, subject) VALUES (\$1, \$2, \$3, \$4, \$5) RETURNING id',
+            'INSERT INTO tickets (steamId, username, avatar, category, subject) VALUES (\\$1, \\$2, \\$3, \\$4, \\$5) RETURNING id',
             [req.user.id, req.user.displayName, req.user.photos[2].value, category, subject]
         );
         const ticketId = ticketRes.rows[0].id;
         
         await client.query(
-            'INSERT INTO messages (ticket_id, sender_steamId, sender_name, sender_avatar, content) VALUES (\$1, \$2, \$3, \$4, \$5)',
+            'INSERT INTO messages (ticket_id, sender_steamId, sender_name, sender_avatar, content) VALUES (\\$1, \\$2, \\$3, \\$4, \\$5)',
             [ticketId, req.user.id, req.user.displayName, req.user.photos[2].value, description]
         );
         await client.query('COMMIT');
@@ -383,23 +370,52 @@ app.post('/api/tickets', async (req, res) => {
 app.get('/api/my-tickets', async (req, res) => {
     if (!req.user) return res.status(401).json([]);
     try {
-        const result = await pool.query('SELECT * FROM tickets WHERE steamId = \$1 ORDER BY id DESC', [req.user.id]);
+        const result = await pool.query('SELECT * FROM tickets WHERE steamId = \\$1 ORDER BY id DESC', [req.user.id]);
         res.json(result.rows);
     } catch (err) { res.json([]); }
+});
+
+// *** NEW ADMIN ROUTE ***
+app.get('/api/admin/tickets', async (req, res) => {
+    // 1. Check if user is logged in and in the ADMIN_IDS list
+    if (!req.user || !ADMIN_IDS.includes(req.user.id)) {
+        return res.status(403).json({ error: "Unauthorized access" });
+    }
+
+    try {
+        // 2. Fetch ALL tickets. 
+        // SORT: Open (1) and Answered (2) tickets appear first, then Closed (3). Then sort by ID desc (newest).
+        const query = `
+            SELECT * FROM tickets 
+            ORDER BY 
+            CASE 
+                WHEN status = 'Open' THEN 1 
+                WHEN status = 'Answered' THEN 2 
+                ELSE 3 
+            END, 
+            id DESC
+        `;
+        
+        const result = await pool.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Admin Dashboard Error:", err);
+        res.status(500).json({ error: "Database error fetching tickets" });
+    }
 });
 
 app.get('/api/ticket/:id', async (req, res) => {
     if (!req.user) return res.status(401).send("Unauthorized");
     const ticketId = req.params.id;
     try {
-        const ticketRes = await pool.query('SELECT * FROM tickets WHERE id = \$1', [ticketId]);
+        const ticketRes = await pool.query('SELECT * FROM tickets WHERE id = \\$1', [ticketId]);
         const ticket = ticketRes.rows[0];
         if (!ticket) return res.status(404).send("Ticket not found");
         
         const isAdminUser = ADMIN_IDS.includes(req.user.id);
         if (ticket.steamid !== req.user.id && !isAdminUser) return res.status(403).send("Forbidden");
 
-        const msgRes = await pool.query('SELECT * FROM messages WHERE ticket_id = \$1 ORDER BY created_at ASC', [ticketId]);
+        const msgRes = await pool.query('SELECT * FROM messages WHERE ticket_id = \\$1 ORDER BY created_at ASC', [ticketId]);
         const enrichedMessages = msgRes.rows.map(msg => ({
             ...msg,
             isAdminSender: ADMIN_IDS.includes(msg.sender_steamid)
@@ -413,16 +429,16 @@ app.post('/api/ticket/:id/reply', async (req, res) => {
     const ticketId = req.params.id;
     const isAdminUser = ADMIN_IDS.includes(req.user.id);
     try {
-        const ticketCheck = await pool.query('SELECT status FROM tickets WHERE id = \$1', [ticketId]);
+        const ticketCheck = await pool.query('SELECT status FROM tickets WHERE id = \\$1', [ticketId]);
         if (ticketCheck.rows.length === 0) return res.status(404).send("Not found");
         if (ticketCheck.rows[0].status === 'Closed') return res.status(400).json({ error: "Ticket is closed." });
 
         await pool.query(
-            'INSERT INTO messages (ticket_id, sender_steamId, sender_name, sender_avatar, content) VALUES (\$1, \$2, \$3, \$4, \$5)',
+            'INSERT INTO messages (ticket_id, sender_steamId, sender_name, sender_avatar, content) VALUES (\\$1, \\$2, \\$3, \\$4, \\$5)',
             [ticketId, req.user.id, req.user.displayName, req.user.photos[2].value, req.body.content]
         );
         const newStatus = isAdminUser ? 'Answered' : 'Open';
-        await pool.query('UPDATE tickets SET status = \$1 WHERE id = \$2', [newStatus, ticketId]);
+        await pool.query('UPDATE tickets SET status = \\$1 WHERE id = \\$2', [newStatus, ticketId]);
         res.json({ success: true });
     } catch (err) { res.status(500).send("Error"); }
 });

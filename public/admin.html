@@ -91,9 +91,10 @@
 
         async function loadAdminTickets() {
             try {
-                // IMPORTANT: Added credentials: 'include'
+                // Fetch the new Admin-specific endpoint
                 const res = await fetch(`${API_BASE}/api/admin/tickets`, { credentials: 'include' });
                 
+                // If the user isn't in ADMIN_IDS list
                 if (res.status === 403) {
                     document.getElementById('admin-content').style.display = 'none';
                     document.getElementById('access-denied').style.display = 'block';
@@ -140,6 +141,7 @@
             }
         }
 
+        // Initialize
         loadAdminTickets();
     </script>
     
