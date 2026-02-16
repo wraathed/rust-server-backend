@@ -91,36 +91,20 @@
 
         async function loadAdminTickets() {
             try {
-                // Fetch with credentials to pass the session cookie
+                // IMPORTANT: Added credentials: 'include'
                 const res = await fetch(`${API_BASE}/api/admin/tickets`, { credentials: 'include' });
                 
-                // Handle 403 Forbidden (Not Admin)
                 if (res.status === 403) {
                     document.getElementById('admin-content').style.display = 'none';
                     document.getElementById('access-denied').style.display = 'block';
                     return;
                 }
                 
-                // Handle 401 (Logged out)
-                if (res.status === 401) {
-                    window.location.href = '/';
-                    return;
-                }
-
-                // Check for Server Errors (500)
-                if (!res.ok) {
-                    const errorText = await res.text(); // Get text just in case it's not JSON
-                    console.error("Server Error:", errorText);
-                    throw new Error(`Server responded with ${res.status}`);
-                }
-
                 const tickets = await res.json();
-                console.log("Tickets loaded:", tickets);
-
                 const tbody = document.getElementById('admin-ticket-list');
                 tbody.innerHTML = '';
 
-                if(!tickets || tickets.length === 0) {
+                if(tickets.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">No tickets found.</td></tr>';
                     return;
                 }
@@ -131,20 +115,18 @@
                     if(t.status === 'Resolved') badgeClass = 'badge-resolved';
                     if(t.status === 'Closed') badgeClass = 'badge-closed';
 
-                    const avatarSrc = t.avatar || 'assets/logo.png';
-
                     const row = `
                         <tr onclick="window.location.href='view-ticket.html?id=${t.id}'">
                             <td>#${t.id}</td>
                             <td>
                                 <div style="display:flex; align-items:center; gap:8px;">
-                                    <img src="${avatarSrc}" style="width:24px; border-radius:50%;" onerror="this.src='assets/logo.png'"> 
-                                    <span style="font-size:13px;">${t.username || 'Unknown'}</span>
+                                    <img src="${t.avatar}" style="width:24px; border-radius:50%;"> 
+                                    <span style="font-size:13px;">${t.username}</span>
                                 </div>
                             </td>
-                            <td style="font-weight:bold; color:white;">${t.subject || 'No Subject'}</td>
-                            <td>${t.category || 'General'}</td>
-                            <td><span class="badge ${badgeClass}">${t.status || 'Open'}</span></td>
+                            <td style="font-weight:bold; color:white;">${t.subject}</td>
+                            <td>${t.category}</td>
+                            <td><span class="badge ${badgeClass}">${t.status}</span></td>
                             <td>
                                 <a href="view-ticket.html?id=${t.id}" class="btn btn-primary" style="padding: 5px 10px; font-size: 11px;">View Chat</a>
                             </td>
@@ -153,8 +135,8 @@
                     tbody.innerHTML += row;
                 });
             } catch (err) {
-                console.error("Frontend Error:", err);
-                document.getElementById('admin-ticket-list').innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Error loading tickets.<br><small>${err.message}</small></td></tr>`;
+                console.error(err);
+                document.getElementById('admin-ticket-list').innerHTML = '<tr><td colspan="6" style="color:red; text-align:center;">Error loading data.</td></tr>';
             }
         }
 

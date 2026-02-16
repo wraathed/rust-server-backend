@@ -38,12 +38,15 @@
     <div class="container">
         <!-- New Profile Header Layout -->
         <div class="profile-header-panel">
-            <img id="profile-avatar" src="assets/logo.png" class="profile-avatar-large" alt="Avatar">
+            <img id="profile-avatar" src="" class="profile-avatar-large" alt="Avatar">
             <div class="profile-details">
                 <h1 id="profile-name">Loading...</h1>
                 <span id="profile-steamid" class="steam-id-text">Please log in...</span>
                 
-                <div id="action-grid" class="profile-actions-grid"></div>
+                <!-- Action Grid -->
+                <div id="action-grid" class="profile-actions-grid">
+                    <!-- Dynamic Badges Injected Here -->
+                </div>
             </div>
         </div>
 
@@ -73,6 +76,7 @@
         </div>
     </div>
 
+    <!-- Toast Notification -->
     <div id="toast"></div>
 
     <footer>
@@ -95,53 +99,162 @@
     <script src="auth.js"></script>
     <script src="loader.js"></script>
     <script src="mobile.js"></script>
-   <script>
-    async function loadTickets() {
-        const tbody = document.getElementById('ticket-body');
-        
-        try {
-            const res = await fetch('/api/my-tickets', { credentials: 'include' });
-            
-            // Check if server returned HTML (error) instead of JSON
-            const contentType = res.headers.get("content-type");
-            if (!contentType || !contentType.includes("application/json")) {
-                throw new Error("Server returned non-JSON response. Check Logs.");
-            }
+    <script>
+        const API_BASE = '';
 
-            const tickets = await res.json();
-
-            // Safety check: Is it an array?
-            if (!Array.isArray(tickets)) {
-                console.error("Data received:", tickets);
-                tbody.innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Error: ${tickets.error || "Invalid Data"}</td></tr>`;
-                return;
-            }
-
-            if (tickets.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px;">No tickets found.</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = tickets.map(t => `
-                <tr onclick="window.location.href='view-ticket.html?id=${t.id}'">
-                    <td>#${t.id}</td>
-                    <td>${t.subject}</td>
-                    <td>${t.category}</td>
-                    <td>${new Date(t.created_at).toLocaleDateString()}</td>
-                    <td>${t.status}</td>
-                    <td><button class="btn btn-primary">View</button></td>
-                </tr>
-            `).join('');
-
-        } catch (err) {
-            console.error("Load Error:", err);
-            tbody.innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Failed to load tickets.</td></tr>`;
+        // Check for URL errors (Duplicate Discord)
+        const urlParams = new URLSearchParams(window.location.search);
+        if(urlParams.get('error') === 'discord_in_use') {
+            showToast("This Discord account is already linked to another Steam user.");
         }
-    }
 
-    // Load on start
-    document.addEventListener('DOMContentLoaded', loadTickets);
-</script>
+        // 1. Check User Login & Update Profile
+        fetch('/user', { credentials: 'include' })
+            .then(res => res.json())
+            .then(user => {
+                if (user) {
+                    // Update Basic Info
+                    document.getElementById('profile-avatar').src = user.photos[2].value;
+                    document.getElementById('profile-name').innerText = user.displayName;
+                    document.getElementById('profile-steamid').innerText = `Steam ID: ${user.id}`;
+
+                    const grid = document.getElementById('action-grid');
+                    grid.innerHTML = ''; // Clear loading state
+
+                    // ==============================
+                    // 1. DISCORD CARD
+                    // ==============================
+                    const discordCard = document.createElement('div');
+                    
+                    if (user.discord) {
+                        discordCard.className = 'status-card linked';
+                        discordCard.innerHTML = `
+                            <img src="assets/discord.png">
+                            <span>Linked: <b>${user.discord}</b></span>
+                        `;
+                        
+                        const unlinkBtn = document.createElement('button');
+                        unlinkBtn.innerText = 'Unlink';
+                        unlinkBtn.className = 'card-action-btn btn-unlink';
+                        unlinkBtn.onclick = async () => {
+                            if(!confirm("Unlink Discord?")) return;
+                            try {
+                                const res = await fetch('/auth/discord/unlink', { method: 'POST' });
+                                const data = await res.json();
+                                if(data.success) window.location.reload();
+                            } catch(e) { console.error(e); }
+                        };
+                        discordCard.appendChild(unlinkBtn);
+                    } else {
+                        discordCard.className = 'status-card not-linked';
+                        discordCard.innerHTML = `
+                            <img src="assets/discord.png">
+                            <a href="/auth/discord" class="card-action-btn btn-link-discord">Link Discord</a>
+                        `;
+                    }
+                    grid.appendChild(discordCard);
+
+                    // ==============================
+                    // 2. STEAM GROUP CARD (UPDATED)
+                    // ==============================
+                    const steamCard = document.createElement('div');
+                    const steamGroupUrl = 'https://steamcommunity.com/groups/classicrustservers';
+
+                    if (user.inSteamGroup) {
+                        steamCard.className = 'status-card steam-joined';
+                        steamCard.innerHTML = `
+                            <img src="assets/steam.png">
+                            <span>Steam Group: <b>Joined</b></span>
+                        `;
+                    } else {
+                        steamCard.className = 'status-card steam-not-joined';
+                        // Added style="flex-direction:column; align-items:flex-start;" to allow text below buttons
+                        steamCard.style.flexDirection = 'column';
+                        steamCard.style.alignItems = 'flex-start';
+                        
+                        steamCard.innerHTML = `
+                            <div style="display:flex; align-items:center; gap:10px; width:100%;">
+                                <img src="assets/steam.png">
+                                <span style="color: #aaa; margin-right: 5px;">Not Joined</span>
+                                <a href="${steamGroupUrl}" target="_blank" class="card-action-btn btn-join-steam">Join</a>
+                                <button onclick="window.location.reload()" class="card-action-btn" title="Refresh" style="background:none; border:1px solid #555; color:#ccc;">&#x21bb;</button>
+                            </div>
+                            <small style="color:#777; font-size:11px; margin-top:5px; margin-left: 32px;">
+                                It may take a minute for Steam to verify your membership.
+                            </small>
+                        `;
+                    }
+                    grid.appendChild(steamCard);
+
+                    // ==============================
+                    // 3. ADMIN CARD
+                    // ==============================
+                    if (user.isAdmin) {
+                        const adminCard = document.createElement('div');
+                        adminCard.className = 'status-card admin';
+                        adminCard.innerHTML = `
+                            <span>🔒 Admin Access</span>
+                            <a href="admin.html" class="card-action-btn" style="color: var(--primary-orange);">Open Panel</a>
+                        `;
+                        grid.appendChild(adminCard);
+                    }
+
+                    // Load Tickets
+                    loadMyTickets();
+                } else {
+                    window.location.href = 'index.html'; 
+                }
+            })
+            .catch(err => {
+                console.error("Auth check failed", err);
+                window.location.href = 'index.html';
+            });
+
+        function showToast(message) {
+            const x = document.getElementById("toast");
+            x.innerText = message;
+            x.className = "show";
+            setTimeout(function(){ x.className = x.className.replace("show", ""); }, 3000);
+        }
+
+        async function loadMyTickets() {
+            try {
+                const response = await fetch(`${API_BASE}/api/my-tickets`, { credentials: 'include' });
+                const tickets = await response.json();
+                const tbody = document.getElementById('ticket-body');
+                tbody.innerHTML = ''; 
+
+                if (tickets.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">You haven\'t created any tickets yet.</td></tr>';
+                    return;
+                }
+
+                tickets.forEach(ticket => {
+                    let statusColor = '#aaa';
+                    if (ticket.status === 'Open') statusColor = 'var(--primary-orange)';
+                    if (ticket.status === 'Answered') statusColor = '#3498db';
+                    if (ticket.status === 'Resolved' || ticket.status === 'Closed') statusColor = '#2ecc71';
+
+                    const date = new Date(ticket.created_at).toLocaleDateString();
+
+                    const rowHtml = `
+                        <tr onclick="window.location.href='view-ticket.html?id=${ticket.id}'">
+                            <td>#${ticket.id}</td>
+                            <td style="font-weight: bold; color: white;">${ticket.subject}</td>
+                            <td>${ticket.category}</td>
+                            <td>${date}</td>
+                            <td style="color: ${statusColor}; font-weight: bold;">${ticket.status}</td>
+                            <td><a href="view-ticket.html?id=${ticket.id}" class="btn btn-primary" style="padding: 5px 10px; font-size: 11px;">View</a></td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += rowHtml;
+                });
+            } catch (err) {
+                console.error(err);
+                document.getElementById('ticket-body').innerHTML = '<tr><td colspan="6" style="color:red; text-align:center;">Error loading tickets.</td></tr>';
+            }
+        }
+    </script>
 
 </body>
 </html>
