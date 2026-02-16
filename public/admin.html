@@ -91,17 +91,27 @@
 
         async function loadAdminTickets() {
             try {
+                // Fetch with credentials to pass the session cookie
                 const res = await fetch(`${API_BASE}/api/admin/tickets`, { credentials: 'include' });
                 
+                // Handle 403 Forbidden (Not Admin)
                 if (res.status === 403) {
                     document.getElementById('admin-content').style.display = 'none';
                     document.getElementById('access-denied').style.display = 'block';
                     return;
                 }
                 
-                // If the server returns 500 but as JSON, this will now work without "Unexpected Token" error
+                // Handle 401 (Logged out)
+                if (res.status === 401) {
+                    window.location.href = '/';
+                    return;
+                }
+
+                // Check for Server Errors (500)
                 if (!res.ok) {
-                    throw new Error(`Server Error: ${res.status}`);
+                    const errorText = await res.text(); // Get text just in case it's not JSON
+                    console.error("Server Error:", errorText);
+                    throw new Error(`Server responded with ${res.status}`);
                 }
 
                 const tickets = await res.json();

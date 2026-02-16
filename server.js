@@ -8,25 +8,38 @@ const { GameDig } = require('gamedig');
 const path = require('path');
 const axios = require('axios');
 
+// --- CONFIGURATION ---
 const app = express();
 const port = process.env.PORT || 3000;
+const isProduction = process.env.NODE_ENV === 'production';
 
-// --- DATABASE CONNECTION ---
+// *** SAFETY FLAG: Set to TRUE to wipe/rebuild ticket tables. Set to FALSE after first run. ***
+const RESET_TICKETS_DB = true; 
+
+// --- DATABASE CONNECTION (NEON.TECH) ---
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false } // Required for Neon/Render
 });
 
-// --- ROBUST DB SCHEMA INITIALIZATION ---
+// --- ROBUST DB INITIALIZATION ---
 const initDb = async () => {
     const client = await pool.connect();
     try {
-        console.log("Initializing Database Schema...");
-        
-        // 1. Users Table
+        console.log("--- DATABASE INITIALIZATION START ---");
+
+        // 1. Ensure Users Table exists (Preserve this data)
+        await client.query("CREATE TABLE IF NOT EXISTS users (steam_id TEXT PRIMARY KEY, discord_id TEXT, discord_username TEXT, gems INT DEFAULT 0, ranks TEXT[] DEFAULT '{}')");
         await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS ranks TEXT[] DEFAULT '{}'");
-        
-        // 2. Tickets Table (Ensure steam_id exists)
+
+        // 2. TICKET SYSTEM REBUILD (If RESET is true)
+        if (RESET_TICKETS_DB) {
+            console.log("!!! WARNING: DROPPING TICKET TABLES FOR REBUILD !!!");
+            await client.query("DROP TABLE IF EXISTS messages CASCADE");
+            await client.query("DROP TABLE IF EXISTS tickets CASCADE");
+        }
+
+        // 3. Create Clean Ticket Tables (Standardized snake_case)
         await client.query(`
             CREATE TABLE IF NOT EXISTS tickets (
                 id SERIAL PRIMARY KEY,
@@ -40,11 +53,10 @@ const initDb = async () => {
             )
         `);
 
-        // 3. Messages Table
         await client.query(`
             CREATE TABLE IF NOT EXISTS messages (
                 id SERIAL PRIMARY KEY,
-                ticket_id INTEGER REFERENCES tickets(id),
+                ticket_id INTEGER REFERENCES tickets(id) ON DELETE CASCADE,
                 sender_steam_id TEXT,
                 sender_name TEXT,
                 sender_avatar TEXT,
@@ -53,23 +65,16 @@ const initDb = async () => {
             )
         `);
 
-        // 4. FIX: If tables existed from previous attempt with wrong column name 'steamid', add 'steam_id'
-        try {
-            await client.query("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS steam_id TEXT");
-            // If the old column exists, migrate data (optional, ensures safety)
-            await client.query("UPDATE tickets SET steam_id = steamid WHERE steam_id IS NULL AND steamid IS NOT NULL").catch(()=>{});
-        } catch (e) {}
-
-        console.log("Database tables verified.");
+        console.log("--- DATABASE INITIALIZATION COMPLETE ---");
     } catch (err) {
-        console.error("DB Init Error:", err);
+        console.error("FATAL DB ERROR:", err);
     } finally {
         client.release();
     }
 };
 initDb();
 
-// --- CONFIGURATION ---
+// --- CONSTANTS ---
 app.set('trust proxy', 1);
 
 const ADMIN_IDS = ['76561198871950726', '76561198839698805']; 
@@ -80,7 +85,6 @@ const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
-
 const STEAM_GROUP_ID = '103582791475507840'; 
 const STEAM_GROUP_URL_NAME = 'classicrustservers'; 
 
@@ -93,21 +97,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Helper: Safely get Avatar
-const getAvatar = (user) => {
-    if (user.photos && user.photos.length > 2) return user.photos[2].value;
-    if (user.photos && user.photos.length > 0) return user.photos[0].value;
-    return 'assets/logo.png'; // Fallback
-};
-
-// Secure Cookies Logic
-const isProduction = process.env.NODE_ENV === 'production';
 app.use(session({
     secret: 'super_secret_rust_key_12345',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: isProduction, 
+        secure: isProduction, // Secure in Prod, Not in Dev
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000 
     }
@@ -119,7 +114,14 @@ app.use(passport.session());
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
-// --- GROUP CHECK ---
+// --- HELPER FUNCTIONS ---
+const getAvatar = (user) => {
+    if (!user || !user.photos) return 'https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/b5/b5bd56c1aa4644a474a2e4972be27ef9e82e517e_full.jpg';
+    if (user.photos.length > 2) return user.photos[2].value;
+    if (user.photos.length > 0) return user.photos[0].value;
+    return 'https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/b5/b5bd56c1aa4644a474a2e4972be27ef9e82e517e_full.jpg';
+};
+
 async function checkGroupMembership(userSteamId) {
     try {
         const apiRes = await axios.get(`http://api.steampowered.com/ISteamUser/GetUserGroupList/v1/?key=${STEAM_API_KEY}&steamid=${userSteamId}`);
@@ -134,7 +136,7 @@ async function checkGroupMembership(userSteamId) {
     return false;
 }
 
-// --- AUTH ---
+// --- AUTHENTICATION ---
 passport.use(new SteamStrategy({
     returnURL: `${DOMAIN}/auth/steam/return`,
     realm: `${DOMAIN}/`,
@@ -201,7 +203,7 @@ app.get('/user', async (req, res) => {
 
 app.get('/logout', (req, res) => { req.logout(() => { req.session.destroy(() => res.redirect('/index.html')); }); });
 
-// --- STORE API ---
+// --- STORE & SERVER API ---
 app.post('/api/store/buy-rank', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Login required" });
     const { rank } = req.body;
@@ -220,7 +222,6 @@ app.post('/api/store/buy-gems', async (req, res) => {
     try { await pool.query('UPDATE users SET gems = gems + \\$1 WHERE steam_id = \$2', [amount, req.user.id]); res.json({ success: true, message: `Added ${amount} gems!` }); } catch (err) { res.status(500).json({ error: "DB Error" }); }
 });
 
-// --- SERVER API ---
 app.post('/api/server/redeem', async (req, res) => {
     try {
         const { steamId, kit } = req.query;
@@ -260,55 +261,75 @@ app.post('/api/server/spend', async (req, res) => {
     } catch (err) { await client.query('ROLLBACK'); return res.send("ERROR"); } finally { client.release(); }
 });
 
-// --- TICKET API (FIXED) ---
+// --- TICKET API (REBUILT) ---
+
+// 1. CREATE TICKET
 app.post('/api/tickets', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Login required' });
     const { category, subject, description } = req.body;
     
+    // Safety check
+    if (!category || !subject || !description) return res.status(400).json({ error: "Missing fields" });
+
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
         
-        // 1. Get avatar safely
+        // SAFE AVATAR ACCESS
         const avatar = getAvatar(req.user);
 
-        // 2. Insert with correct 'steam_id' column
+        // Debug Log
+        console.log(`Creating ticket for ${req.user.displayName} (${req.user.id})`);
+
         const ticketRes = await client.query(
             'INSERT INTO tickets (steam_id, username, avatar, category, subject) VALUES (\\$1, \\$2, \\$3, \\$4, \\$5) RETURNING id',
             [req.user.id, req.user.displayName, avatar, category, subject]
         );
         const ticketId = ticketRes.rows[0].id;
         
-        // 3. Insert Message
         await client.query(
             'INSERT INTO messages (ticket_id, sender_steam_id, sender_name, sender_avatar, content) VALUES (\\$1, \\$2, \\$3, \\$4, \\$5)',
             [ticketId, req.user.id, req.user.displayName, avatar, description]
         );
         await client.query('COMMIT');
-        res.json({ success: true });
+        res.json({ success: true, ticketId: ticketId });
     } catch (e) {
         await client.query('ROLLBACK');
-        console.error("Ticket Create Error:", e); // Check this in Render logs if it fails
+        console.error("TICKET CREATE ERROR:", e);
         res.status(500).json({ error: 'Database error', details: e.message });
     } finally {
         client.release();
     }
 });
 
+// 2. GET MY TICKETS
 app.get('/api/my-tickets', async (req, res) => {
     if (!req.user) return res.status(401).json([]);
     try {
-        // Use steam_id (snake_case)
         const result = await pool.query('SELECT * FROM tickets WHERE steam_id = \\$1 ORDER BY id DESC', [req.user.id]);
         res.json(result.rows);
-    } catch (err) { console.error("My Tickets Error:", err); res.json([]); }
+    } catch (err) { 
+        console.error("My Tickets Error:", err); 
+        res.status(500).json({ error: "DB Error" });
+    }
 });
 
-// --- ADMIN API ---
+// 3. ADMIN GET ALL TICKETS
 app.get('/api/admin/tickets', async (req, res) => {
-    if (!req.user || !ADMIN_IDS.includes(req.user.id)) return res.status(403).json({ error: "Unauthorized access" });
+    if (!req.user) return res.status(401).json({ error: "Not logged in" });
+    if (!ADMIN_IDS.includes(req.user.id)) return res.status(403).json({ error: "Unauthorized access" });
+
     try {
-        const query = `SELECT * FROM tickets ORDER BY CASE WHEN status = 'Open' THEN 1 WHEN status = 'Answered' THEN 2 ELSE 3 END, id DESC`;
+        const query = `
+            SELECT * FROM tickets 
+            ORDER BY 
+            CASE 
+                WHEN status = 'Open' THEN 1 
+                WHEN status = 'Answered' THEN 2 
+                ELSE 3 
+            END, 
+            id DESC
+        `;
         const result = await pool.query(query);
         res.json(result.rows);
     } catch (err) {
@@ -317,34 +338,46 @@ app.get('/api/admin/tickets', async (req, res) => {
     }
 });
 
+// 4. GET SINGLE TICKET
 app.get('/api/ticket/:id', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const ticketId = req.params.id;
+
     try {
         const ticketRes = await pool.query('SELECT * FROM tickets WHERE id = \\$1', [ticketId]);
         const ticket = ticketRes.rows[0];
+
         if (!ticket) return res.status(404).json({ error: "Ticket not found" });
         
         const isAdminUser = ADMIN_IDS.includes(req.user.id);
-        // Compare steam_id
-        if (ticket.steam_id !== req.user.id && !isAdminUser) return res.status(403).json({ error: "Forbidden" });
+
+        // CHECK OWNERSHIP
+        if (ticket.steam_id !== req.user.id && !isAdminUser) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
 
         const msgRes = await pool.query('SELECT * FROM messages WHERE ticket_id = \\$1 ORDER BY created_at ASC', [ticketId]);
+        
         const enrichedMessages = msgRes.rows.map(msg => ({
             ...msg,
             isAdminSender: ADMIN_IDS.includes(msg.sender_steam_id)
         }));
+
         res.json({ ticket, messages: enrichedMessages, currentUserSteamId: req.user.id, isAdmin: isAdminUser });
+
     } catch (err) { 
-        console.error("Get Ticket Error:", err);
-        res.status(500).json({ error: "DB Error", details: err.message }); 
+        console.error("GET TICKET ERROR:", err);
+        // RETURN JSON, NOT TEXT
+        res.status(500).json({ error: "Internal Server Error", details: err.message }); 
     }
 });
 
+// 5. REPLY TO TICKET
 app.post('/api/ticket/:id/reply', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const ticketId = req.params.id;
     const isAdminUser = ADMIN_IDS.includes(req.user.id);
+
     try {
         const ticketCheck = await pool.query('SELECT status FROM tickets WHERE id = \\$1', [ticketId]);
         if (ticketCheck.rows.length === 0) return res.status(404).json({ error: "Not found" });
@@ -356,16 +389,17 @@ app.post('/api/ticket/:id/reply', async (req, res) => {
             'INSERT INTO messages (ticket_id, sender_steam_id, sender_name, sender_avatar, content) VALUES (\\$1, \\$2, \\$3, \\$4, \\$5)',
             [ticketId, req.user.id, req.user.displayName, avatar, req.body.content]
         );
+
         const newStatus = isAdminUser ? 'Answered' : 'Open';
         await pool.query('UPDATE tickets SET status = \\$1 WHERE id = \\$2', [newStatus, ticketId]);
+        
         res.json({ success: true });
     } catch (err) { 
-        console.error("Reply Error:", err);
-        res.status(500).json({ error: "Error", details: err.message }); 
+        console.error("REPLY ERROR:", err);
+        res.status(500).json({ error: "Error replying", details: err.message }); 
     }
 });
 
-// --- SERVER INFO API ---
 app.get('/api/servers', async (req, res) => {
     try {
         const promises = SERVERS.map(server =>
