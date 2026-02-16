@@ -91,7 +91,6 @@
 
         async function loadAdminTickets() {
             try {
-                // Ensure credentials are sent with the request (cookies)
                 const res = await fetch(`${API_BASE}/api/admin/tickets`, { credentials: 'include' });
                 
                 if (res.status === 403) {
@@ -100,11 +99,16 @@
                     return;
                 }
                 
+                // If the server returns 500 but as JSON, this will now work without "Unexpected Token" error
+                if (!res.ok) {
+                    throw new Error(`Server Error: ${res.status}`);
+                }
+
                 const tickets = await res.json();
-                console.log("Loaded Tickets:", tickets); // Debug info in Console F12
+                console.log("Tickets loaded:", tickets);
 
                 const tbody = document.getElementById('admin-ticket-list');
-                tbody.innerHTML = ''; // Clear "Loading..."
+                tbody.innerHTML = '';
 
                 if(!tickets || tickets.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">No tickets found.</td></tr>';
@@ -117,8 +121,7 @@
                     if(t.status === 'Resolved') badgeClass = 'badge-resolved';
                     if(t.status === 'Closed') badgeClass = 'badge-closed';
 
-                    // Fallback for missing avatar
-                    const avatarSrc = t.avatar || 'assets/logo.png'; 
+                    const avatarSrc = t.avatar || 'assets/logo.png';
 
                     const row = `
                         <tr onclick="window.location.href='view-ticket.html?id=${t.id}'">
@@ -140,8 +143,8 @@
                     tbody.innerHTML += row;
                 });
             } catch (err) {
-                console.error(err);
-                document.getElementById('admin-ticket-list').innerHTML = '<tr><td colspan="6" style="color:red; text-align:center;">Error loading data. Check console.</td></tr>';
+                console.error("Frontend Error:", err);
+                document.getElementById('admin-ticket-list').innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Error loading tickets.<br><small>${err.message}</small></td></tr>`;
             }
         }
 
