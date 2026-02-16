@@ -2,133 +2,85 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Classic Rust - Create Ticket</title>
+    <title>Create Ticket</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
     <header>
-        <a href="index.html" class="logo">
-            <img src="assets/logo.png" alt="Classic Rust Logo">
-        </a>
-         <div class="menu-toggle">
-        <span></span>
-        <span></span>
-        <span></span>
-    </div>
+        <a href="index.html" class="logo"><img src="assets/logo.png" alt="Logo"></a>
         <nav>
             <ul>
-                <li><a href="servers.html">Servers</a></li>
-                <li><a href="store.html">Store</a></li>
-                <li><a href="create-ticket.html" class="active">Create a Ticket</a></li>
-                <li><a href="profile.html">My Profile</a></li>
+                <li><a href="profile.html">Back to Profile</a></li>
             </ul>
         </nav>
-        <div id="auth-section">
-            <a href="/auth/steam" class="steam-login">
-                <img src="assets/steam.png" alt="Steam">
-                Sign in with Steam
-            </a>
-        </div>
     </header>
 
     <div class="container">
-        <h2>Create a Support Ticket</h2>
-        <div class="card" style="text-align: left; max-width: 800px; margin: 0 auto;">
-            <form id="ticket-form">
+        <h2>Open a New Ticket</h2>
+        <div class="form-container" style="max-width: 600px; margin: 0 auto; background: #222; padding: 20px; border-radius: 8px;">
+            <form id="new-ticket-form">
                 <div class="form-group">
                     <label>Category</label>
-                    <select id="category" required>
-                        <option value="General Support">General Support</option>
-                        <option value="Player Report">Player Report</option>
-                        <option value="Store Purchase Issue">Store Purchase Issue</option>
-                        <option value="Unban Request">Unban Request</option>
+                    <select id="t-cat" style="width: 100%; padding: 10px; margin-bottom: 15px; background: #333; color: white; border: none;">
+                        <option value="General">General</option>
+                        <option value="Report">Player Report</option>
+                        <option value="Store">Store Issue</option>
+                        <option value="Ban">Ban Appeal</option>
                     </select>
                 </div>
                 <div class="form-group">
                     <label>Subject</label>
-                    <input type="text" id="subject" placeholder="Brief summary of issue" required>
+                    <input type="text" id="t-sub" placeholder="Subject" style="width: 100%; padding: 10px; margin-bottom: 15px; background: #333; color: white; border: none;" required>
                 </div>
                 <div class="form-group">
                     <label>Description</label>
-                    <textarea id="description" rows="6" placeholder="Describe your issue in detail..." required></textarea>
+                    <textarea id="t-desc" rows="5" placeholder="Details..." style="width: 100%; padding: 10px; margin-bottom: 15px; background: #333; color: white; border: none;" required></textarea>
                 </div>
-                <button type="submit" id="submit-btn" class="btn btn-primary">Submit Ticket</button>
+                <button type="submit" id="submit-btn" class="btn btn-primary" style="width: 100%;">Create Ticket</button>
             </form>
         </div>
     </div>
 
-    <footer>
-        <div class="footer-content">
-            <div class="footer-left">
-                <p>&copy; 2026 Classic Rust. All rights reserved.</p>
-                <p class="credits">Designed by <a href="https://aetheriwebdesign.com/" target="_blank">Aetheri Web Design</a></p>
-            </div>
-            <div class="footer-right">
-                <a href="#">Terms of Service</a>
-                <a href="#">Privacy Policy</a>
-                <a href="https://discord.gg/QdQUvPvg" class="btn btn-discord-small">
-                    <img src="assets/discord.png" alt="Discord" style="width: 20px; height: 20px;">
-                    Join Discord
-                </a>
-            </div>
-        </div>
-    </footer>
-
-    <script src="auth.js"></script>
-    <script src="loader.js"></script>
-    <script src="mobile.js"></script>
     <script>
-        const API_BASE = '';
-
-        document.getElementById('ticket-form').addEventListener('submit', async (e) => {
-            e.preventDefault(); 
-
-            const category = document.getElementById('category').value;
-            const subject = document.getElementById('subject').value;
-            const description = document.getElementById('description').value;
+        document.getElementById('new-ticket-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
             const btn = document.getElementById('submit-btn');
-
-            // 1. Disable button to prevent double submits
             btn.disabled = true;
-            btn.innerText = "Submitting...";
+            btn.innerText = "Processing...";
+
+            const payload = {
+                category: document.getElementById('t-cat').value,
+                subject: document.getElementById('t-sub').value,
+                description: document.getElementById('t-desc').value
+            };
 
             try {
-                const response = await fetch(`${API_BASE}/api/tickets`, {
+                // FORCE Credentials Include
+                const res = await fetch('/api/tickets', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include', // <--- REQUIRED: Sends the session cookie
-                    body: JSON.stringify({ category, subject, description })
+                    credentials: 'include',
+                    body: JSON.stringify(payload)
                 });
 
-                // 2. Handle specific status codes
-                if (response.status === 401) {
-                    alert('You must be logged in with Steam to create a ticket.');
-                    btn.disabled = false;
-                    btn.innerText = "Submit Ticket";
-                    return;
-                }
+                const data = await res.json();
 
-                // 3. Parse JSON response from the new server code
-                const data = await response.json();
-
-                if (data.success) {
-                    // Success! Redirect to profile
-                    window.location.href = 'profile.html'; 
+                if (res.ok && data.success) {
+                    alert("Ticket created!");
+                    window.location.href = "profile.html";
                 } else {
-                    // Server returned an error message (e.g. database error)
-                    alert('Error: ' + (data.error || 'Unknown error occurred'));
+                    alert("Error: " + (data.error || "Unknown Error"));
+                    console.error(data);
                     btn.disabled = false;
-                    btn.innerText = "Submit Ticket";
+                    btn.innerText = "Create Ticket";
                 }
             } catch (err) {
                 console.error(err);
-                alert('Network error occurred while creating the ticket.');
+                alert("Network Error. Check console.");
                 btn.disabled = false;
-                btn.innerText = "Submit Ticket";
+                btn.innerText = "Create Ticket";
             }
         });
     </script>
-
 </body>
 </html>

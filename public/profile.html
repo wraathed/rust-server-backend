@@ -95,146 +95,53 @@
     <script src="auth.js"></script>
     <script src="loader.js"></script>
     <script src="mobile.js"></script>
-    <script>
-        const API_BASE = '';
-
-        async function initProfile() {
-            try {
-                const res = await fetch('/user', { credentials: 'include' });
-                const user = await res.json();
-
-                if (!user) {
-                    window.location.href = 'index.html';
-                    return;
-                }
-
-                const avatar = (user.photos && user.photos.length > 2) ? user.photos[2].value : 'assets/logo.png';
-                document.getElementById('profile-avatar').src = avatar;
-                document.getElementById('profile-name').innerText = user.displayName;
-                document.getElementById('profile-steamid').innerText = `Steam ID: ${user.id}`;
-
-                const grid = document.getElementById('action-grid');
-                grid.innerHTML = ''; 
-
-                // --- 1. DISCORD CARD ---
-                const discordCard = document.createElement('div');
-                if (user.discord) {
-                    discordCard.className = 'status-card linked';
-                    discordCard.innerHTML = `
-                        <img src="assets/discord.png">
-                        <span>Linked: <b>${user.discord}</b></span>
-                    `;
-                    const unlinkBtn = document.createElement('button');
-                    unlinkBtn.innerText = 'Unlink';
-                    unlinkBtn.className = 'card-action-btn btn-unlink';
-                    unlinkBtn.onclick = async () => {
-                        if(!confirm("Unlink Discord?")) return;
-                        try {
-                            const r = await fetch('/auth/discord/unlink', { method: 'POST', credentials: 'include' });
-                            const d = await r.json();
-                            if(d.success) window.location.reload();
-                        } catch(e) { console.error(e); }
-                    };
-                    discordCard.appendChild(unlinkBtn);
-                } else {
-                    discordCard.className = 'status-card not-linked';
-                    discordCard.innerHTML = `
-                        <img src="assets/discord.png">
-                        <a href="/auth/discord" class="card-action-btn btn-link-discord">Link Discord</a>
-                    `;
-                }
-                grid.appendChild(discordCard);
-
-                // --- 2. STEAM GROUP CARD ---
-                const steamCard = document.createElement('div');
-                if (user.inSteamGroup) {
-                    steamCard.className = 'status-card steam-joined';
-                    steamCard.innerHTML = `
-                        <img src="assets/steam.png">
-                        <span>Steam Group: <b>Joined</b></span>
-                    `;
-                } else {
-                    steamCard.className = 'status-card steam-not-joined';
-                    steamCard.style.flexDirection = 'column';
-                    steamCard.style.alignItems = 'flex-start';
-                    steamCard.innerHTML = `
-                        <div style="display:flex; align-items:center; gap:10px; width:100%;">
-                            <img src="assets/steam.png">
-                            <span style="color: #aaa; margin-right: 5px;">Not Joined</span>
-                            <a href="https://steamcommunity.com/groups/classicrustservers" target="_blank" class="card-action-btn btn-join-steam">Join</a>
-                            <button onclick="window.location.reload()" class="card-action-btn" title="Refresh" style="background:none; border:1px solid #555; color:#ccc;">&#x21bb;</button>
-                        </div>
-                    `;
-                }
-                grid.appendChild(steamCard);
-
-                // --- 3. ADMIN CARD ---
-                if (user.isAdmin) {
-                    const adminCard = document.createElement('div');
-                    adminCard.className = 'status-card admin';
-                    adminCard.innerHTML = `
-                        <span>🔒 Admin Access</span>
-                        <a href="admin.html" class="card-action-btn" style="color: var(--primary-orange);">Open Panel</a>
-                    `;
-                    grid.appendChild(adminCard);
-                }
-
-                // Load Tickets
-                loadMyTickets();
-
-            } catch (err) {
-                console.error("Auth check failed", err);
+   <script>
+    async function loadTickets() {
+        const tbody = document.getElementById('ticket-body');
+        
+        try {
+            const res = await fetch('/api/my-tickets', { credentials: 'include' });
+            
+            // Check if server returned HTML (error) instead of JSON
+            const contentType = res.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                throw new Error("Server returned non-JSON response. Check Logs.");
             }
-        }
 
-        async function loadMyTickets() {
-            try {
-                const response = await fetch(`${API_BASE}/api/my-tickets`, { credentials: 'include' });
-                const tickets = await response.json();
-                const tbody = document.getElementById('ticket-body');
-                tbody.innerHTML = ''; 
+            const tickets = await res.json();
 
-                // FIX: Check if tickets is an Array. If it's an error object, handle it.
-                if (!Array.isArray(tickets)) {
-                    console.error("Server Response:", tickets);
-                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: red;">Error: ${tickets.error || 'Failed to load'}</td></tr>`;
-                    return;
-                }
-
-                if (tickets.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">You haven\'t created any tickets yet.</td></tr>';
-                    return;
-                }
-
-                tickets.forEach(ticket => {
-                    let statusColor = '#aaa';
-                    if (ticket.status === 'Open') statusColor = 'var(--primary-orange)';
-                    if (ticket.status === 'Answered') statusColor = '#3498db';
-                    if (ticket.status === 'Resolved' || ticket.status === 'Closed') statusColor = '#2ecc71';
-
-                    const date = new Date(ticket.created_at).toLocaleDateString();
-
-                    const rowHtml = `
-                        <tr onclick="window.location.href='view-ticket.html?id=${ticket.id}'">
-                            <td>#${ticket.id}</td>
-                            <td style="font-weight: bold; color: white;">${ticket.subject}</td>
-                            <td>${ticket.category}</td>
-                            <td>${date}</td>
-                            <td style="color: ${statusColor}; font-weight: bold;">${ticket.status}</td>
-                            <td><a href="view-ticket.html?id=${ticket.id}" class="btn btn-primary" style="padding: 5px 10px; font-size: 11px;">View</a></td>
-                        </tr>
-                    `;
-                    tbody.innerHTML += rowHtml;
-                });
-            } catch (err) {
-                console.error(err);
-                document.getElementById('ticket-body').innerHTML = '<tr><td colspan="6" style="color:red; text-align:center;">Error loading tickets.</td></tr>';
+            // Safety check: Is it an array?
+            if (!Array.isArray(tickets)) {
+                console.error("Data received:", tickets);
+                tbody.innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Error: ${tickets.error || "Invalid Data"}</td></tr>`;
+                return;
             }
-        }
 
-        // Initialize Page
-        document.addEventListener('DOMContentLoaded', initProfile);
-    </script>
+            if (tickets.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px;">No tickets found.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = tickets.map(t => `
+                <tr onclick="window.location.href='view-ticket.html?id=${t.id}'">
+                    <td>#${t.id}</td>
+                    <td>${t.subject}</td>
+                    <td>${t.category}</td>
+                    <td>${new Date(t.created_at).toLocaleDateString()}</td>
+                    <td>${t.status}</td>
+                    <td><button class="btn btn-primary">View</button></td>
+                </tr>
+            `).join('');
+
+        } catch (err) {
+            console.error("Load Error:", err);
+            tbody.innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Failed to load tickets.</td></tr>`;
+        }
+    }
+
+    // Load on start
+    document.addEventListener('DOMContentLoaded', loadTickets);
+</script>
 
 </body>
 </html>
