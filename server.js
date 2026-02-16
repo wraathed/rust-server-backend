@@ -7,6 +7,7 @@ const { Pool } = require('pg');
 const { GameDig } = require('gamedig');
 const path = require('path');
 const axios = require('axios');
+const pgSession = require('connect-pg-simple')(session);
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -48,13 +49,20 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
+    store: new pgSession({
+        pool : pool,                // Use your existing Postgres pool
+        tableName : 'session',      // We will create this table in Step 2
+        createTableIfMissing: true  // Automatically creates the table
+    }),
     secret: 'super_secret_rust_key_12345',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true, 
+        // IMPORTANT: If testing on localhost (HTTP), secure MUST be false.
+        // If on Render (HTTPS), secure MUST be true.
+        secure: process.env.NODE_ENV === 'production', 
         httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000 
+        maxAge: 30 * 24 * 60 * 60 * 1000 // 30 Days
     }
 }));
 
@@ -353,27 +361,61 @@ app.post('/api/server/spend', async (req, res) => {
 });
 
 // --- TICKET API ---
+
+app.get('/api/admin/tickets', async (req, res) => {
+    // 1. Check if user is logged in AND is an admin
+    if (!req.user || !ADMIN_IDS.includes(req.user.id)) {
+        return res.status(403).json({ error: "Access Denied" });
+    }
+
+    try {
+        // 2. Fetch all tickets. 
+        // Logic: specific sorting (Open tickets first, then Answered, then Closed)
+        const query = `
+            SELECT * FROM tickets 
+            ORDER BY 
+            CASE 
+                WHEN status = 'Open' THEN 1 
+                WHEN status = 'Answered' THEN 2 
+                WHEN status = 'Resolved' THEN 3
+                ELSE 4 
+            END, 
+            id DESC
+        `;
+        
+        const result = await pool.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Admin Ticket Load Error:", err);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
 app.post('/api/tickets', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Login required' });
     const { category, subject, description } = req.body;
     
+    // Safety check for avatar
+    const avatar = (req.user.photos && req.user.photos[2]) ? req.user.photos[2].value : 'https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/fe/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg';
+
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
         const ticketRes = await client.query(
             'INSERT INTO tickets (steamId, username, avatar, category, subject) VALUES (\$1, \$2, \$3, \$4, \$5) RETURNING id',
-            [req.user.id, req.user.displayName, req.user.photos[2].value, category, subject]
+            [req.user.id, req.user.displayName, avatar, category, subject]
         );
         const ticketId = ticketRes.rows[0].id;
         
         await client.query(
             'INSERT INTO messages (ticket_id, sender_steamId, sender_name, sender_avatar, content) VALUES (\$1, \$2, \$3, \$4, \$5)',
-            [ticketId, req.user.id, req.user.displayName, req.user.photos[2].value, description]
+            [ticketId, req.user.id, req.user.displayName, avatar, description]
         );
         await client.query('COMMIT');
         res.json({ success: true });
     } catch (e) {
         await client.query('ROLLBACK');
+        console.error("Ticket Create Error:", e); // Log the actual error
         res.status(500).json({ error: 'Database error' });
     } finally {
         client.release();
