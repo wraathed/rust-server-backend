@@ -5,6 +5,11 @@
     <title>View Ticket - Classic Rust</title>
     <link rel="stylesheet" href="style.css">
     <style>
+
+        :root {
+    --primary-orange: #ff9100; /* Standard Rust Orange */
+    --bg-panel: #1e1e1e;
+}
         .chat-container { background-color: var(--bg-panel); border: 1px solid #333; border-radius: 10px; padding: 20px; max-width: 900px; margin: 0 auto; }
         .chat-header { border-bottom: 1px solid #333; padding-bottom: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
         
@@ -95,127 +100,133 @@
     <script src="auth.js"></script>
     <script src="loader.js"></script>
     <script>
-        const API_BASE = ''; 
-        const params = new URLSearchParams(window.location.search);
-        const ticketId = params.get('id');
+    const API_BASE = ''; 
+    const params = new URLSearchParams(window.location.search);
+    const ticketId = params.get('id');
 
-        if (!ticketId) window.location.href = 'profile.html';
+    if (!ticketId) window.location.href = 'profile.html';
 
-        let isFirstLoad = true;
+    let isFirstLoad = true;
 
-        async function loadTicket() {
-            try {
-                const res = await fetch(`${API_BASE}/api/ticket/${ticketId}`, { credentials: 'include' });
-                
-                if (res.status === 403 || res.status === 401) {
-                    alert("Unauthorized access.");
-                    window.location.href = 'index.html';
-                    return;
-                }
-
-                const data = await res.json();
-                const { ticket, messages, currentUserSteamId, isAdmin } = data;
-
-                // 1. Update Header Info
-                document.getElementById('ticket-subject').innerText = ticket.subject;
-                document.getElementById('ticket-id').innerText = `Ticket #${ticket.id} - ${ticket.category}`;
-                document.getElementById('ticket-status').innerText = ticket.status;
-
-                // 2. Handle Closed State
-                const replyBox = document.getElementById('reply-box');
-                const closedMsg = document.getElementById('closed-message');
-
-                if (ticket.status === 'Closed') {
-                    replyBox.classList.add('disabled');
-                    document.getElementById('reply-content').disabled = true;
-                    document.getElementById('send-btn').disabled = true;
-                    closedMsg.style.display = 'block';
-                } else {
-                    replyBox.classList.remove('disabled');
-                    document.getElementById('reply-content').disabled = false;
-                    document.getElementById('send-btn').disabled = false;
-                    closedMsg.style.display = 'none';
-                }
-
-                // 3. Show Admin Controls
-                if (isAdmin) {
-                    document.getElementById('admin-controls').style.display = 'flex';
-                    // Show the "Back to Panel" button outside the box
-                    document.getElementById('admin-back-wrapper').style.display = 'block';
-                    
-                    const steamId = ticket.steamid || ticket.steamId; 
-                    document.getElementById('steam-profile-link').href = `https://steamcommunity.com/profiles/${steamId}`;
-                }
-
-                // 4. Render Messages
-                const chatArea = document.getElementById('messages-area');
-                const isScrolledToBottom = chatArea.scrollHeight - chatArea.scrollTop <= chatArea.clientHeight + 100;
-
-                let html = '';
-                messages.forEach(msg => {
-                    const isMe = msg.sender_steamid === currentUserSteamId; 
-                    const showAdminBadge = msg.isAdminSender;
-
-                    html += `
-                        <div class="message-row ${isMe ? 'me' : 'other'}">
-                            <img src="${msg.sender_avatar}" class="avatar">
-                            <div class="message-bubble">
-                                <span class="sender-name">
-                                    ${msg.sender_name}
-                                    ${showAdminBadge ? '<span class="admin-tag">ADMIN</span>' : ''}
-                                </span>
-                                ${msg.content}
-                            </div>
-                        </div>
-                    `;
-                });
-
-                if (chatArea.innerHTML !== html) {
-                    chatArea.innerHTML = html;
-                    if (isFirstLoad || isScrolledToBottom) {
-                        chatArea.scrollTop = chatArea.scrollHeight;
-                        isFirstLoad = false;
-                    }
-                }
-
-            } catch (err) {
-                console.error(err);
+    async function loadTicket() {
+        try {
+            const res = await fetch(`${API_BASE}/api/ticket/${ticketId}`, { credentials: 'include' });
+            
+            if (res.status === 403 || res.status === 401) {
+                alert("Unauthorized access.");
+                window.location.href = 'index.html';
+                return;
             }
-        }
 
-        async function sendReply() {
-            const content = document.getElementById('reply-content').value;
-            if (!content.trim()) return;
+            const data = await res.json();
+            const { ticket, messages, currentUserSteamId, isAdmin } = data;
 
-            const res = await fetch(`${API_BASE}/api/ticket/${ticketId}/reply`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ content })
-            });
+            // 1. Update Header Info
+            document.getElementById('ticket-subject').innerText = ticket.subject;
+            document.getElementById('ticket-id').innerText = `Ticket #${ticket.id} - ${ticket.category}`;
+            document.getElementById('ticket-status').innerText = ticket.status;
 
-            if (res.ok) {
-                document.getElementById('reply-content').value = '';
-                loadTicket(); 
+            // 2. Handle Closed State
+            const replyBox = document.getElementById('reply-box');
+            const closedMsg = document.getElementById('closed-message');
+
+            if (ticket.status === 'Closed') {
+                replyBox.classList.add('disabled');
+                document.getElementById('reply-content').disabled = true;
+                document.getElementById('send-btn').disabled = true;
+                closedMsg.style.display = 'block';
             } else {
-                const err = await res.json();
-                alert(err.error || "Failed to send message");
+                replyBox.classList.remove('disabled');
+                document.getElementById('reply-content').disabled = false;
+                document.getElementById('send-btn').disabled = false;
+                closedMsg.style.display = 'none';
             }
-        }
 
-        async function changeStatus(newStatus) {
-            await fetch(`${API_BASE}/api/ticket/${ticketId}/status`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ status: newStatus })
+            // 3. Show Admin Controls
+            if (isAdmin) {
+                document.getElementById('admin-controls').style.display = 'flex';
+                document.getElementById('admin-back-wrapper').style.display = 'block';
+                // Handle snake_case vs camelCase for ticket owner ID
+                const steamId = ticket.steam_id || ticket.steamId || ticket.steamid; 
+                document.getElementById('steam-profile-link').href = `https://steamcommunity.com/profiles/${steamId}`;
+            }
+
+            // 4. Render Messages
+            const chatArea = document.getElementById('messages-area');
+            const isScrolledToBottom = chatArea.scrollHeight - chatArea.scrollTop <= chatArea.clientHeight + 100;
+
+            let html = '';
+            messages.forEach(msg => {
+                // FIXED: Check for 'sender_steam_id' (database column) OR 'sender_steamid' (legacy)
+                const msgSenderId = msg.sender_steam_id || msg.sender_steamid;
+                
+                // Determine if this message is from the current user
+                const isMe = msgSenderId === currentUserSteamId; 
+                
+                // Determine if sender is Admin
+                // If the server flag is missing, fallback: if it's ME and I am ADMIN, show badge
+                const showAdminBadge = msg.isAdminSender || (isMe && isAdmin);
+
+                html += `
+                    <div class="message-row ${isMe ? 'me' : 'other'}">
+                        <img src="${msg.sender_avatar}" class="avatar">
+                        <div class="message-bubble">
+                            <span class="sender-name">
+                                ${msg.sender_name}
+                                ${showAdminBadge ? '<span class="admin-tag">ADMIN</span>' : ''}
+                            </span>
+                            ${msg.content}
+                        </div>
+                    </div>
+                `;
             });
-            loadTicket();
-        }
 
+            if (chatArea.innerHTML !== html) {
+                chatArea.innerHTML = html;
+                if (isFirstLoad || isScrolledToBottom) {
+                    chatArea.scrollTop = chatArea.scrollHeight;
+                    isFirstLoad = false;
+                }
+            }
+
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    async function sendReply() {
+        const content = document.getElementById('reply-content').value;
+        if (!content.trim()) return;
+
+        const res = await fetch(`${API_BASE}/api/ticket/${ticketId}/reply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ content })
+        });
+
+        if (res.ok) {
+            document.getElementById('reply-content').value = '';
+            loadTicket(); 
+        } else {
+            const err = await res.json();
+            alert(err.error || "Failed to send message");
+        }
+    }
+
+    async function changeStatus(newStatus) {
+        await fetch(`${API_BASE}/api/ticket/${ticketId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ status: newStatus })
+        });
         loadTicket();
-        setInterval(loadTicket, 3000);
-    </script>
+    }
+
+    loadTicket();
+    setInterval(loadTicket, 3000);
+</script>
 
     <footer>
         <div class="footer-content">

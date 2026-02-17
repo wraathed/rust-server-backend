@@ -286,9 +286,10 @@ app.get('/api/ticket/:id', async (req, res) => {
         const msgRes = await pool.query('SELECT * FROM messages WHERE ticket_id = \$1 ORDER BY created_at ASC', [ticketId]);
         
         const enrichedMessages = msgRes.rows.map(msg => ({
-            ...msg,
-            isAdminSender: ADMIN_IDS.includes(msg.sender_steamid)
-        }));
+    ...msg,
+    // Check both just in case, but sender_steam_id is the new standard
+    isAdminSender: ADMIN_IDS.includes(msg.sender_steam_id) 
+}));
 
         res.json({ ticket, messages: enrichedMessages, currentUserSteamId: req.user.id, isAdmin: isAdminUser });
     } catch (err) { res.status(500).send("DB Error"); }
