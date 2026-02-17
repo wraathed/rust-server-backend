@@ -278,10 +278,12 @@ app.get('/api/ticket/:id', async (req, res) => {
         const ticketRes = await pool.query('SELECT * FROM tickets WHERE id = \$1', [ticketId]);
         const ticket = ticketRes.rows[0];
 
-        if (!ticket) return res.status(404).send("Ticket not found");
-        
-        const isAdminUser = ADMIN_IDS.includes(req.user.id);
-        if (ticket.steamid !== req.user.id && !isAdminUser) return res.status(403).send("Forbidden");
+if (!ticket) return res.status(404).send("Ticket not found");
+
+const isAdminUser = ADMIN_IDS.includes(req.user.id);
+
+// FIX: Change ticket.steamid to ticket.steam_id
+if (ticket.steam_id !== req.user.id && !isAdminUser) return res.status(403).send("Forbidden");
 
         const msgRes = await pool.query('SELECT * FROM messages WHERE ticket_id = \$1 ORDER BY created_at ASC', [ticketId]);
         
