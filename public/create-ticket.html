@@ -98,10 +98,13 @@
                 });
 
                 if (response.ok) {
-                    window.location.href = 'profile.html'; 
-                } else {
-                    alert('You must be logged in with Steam to create a ticket.');
-                }
+    window.location.href = 'profile.html'; 
+} else if (response.status === 401) {
+    alert('You must be logged in with Steam to create a ticket.');
+} else {
+    // This will catch 500 errors (database crashes) and tell you!
+    alert('A server error occurred. Please try again later.'); 
+}
             } catch (err) {
                 console.error(err);
                 alert('An error occurred while creating the ticket.');

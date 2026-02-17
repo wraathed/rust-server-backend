@@ -7,6 +7,7 @@ const { Pool } = require('pg');
 const { GameDig } = require('gamedig');
 const path = require('path');
 const axios = require('axios');
+const pgSession = require('connect-pg-simple')(session);
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -44,13 +45,18 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
+    store: new pgSession({
+        pool: pool,                // Use your existing database connection
+        tableName: 'session',      // Matches the table in your screenshot
+        createTableIfMissing: false // Since you already created it manually
+    }),
     secret: 'super_secret_rust_key_12345',
     resave: false,
     saveUninitialized: false,
     cookie: {
         secure: true, 
         httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000 
+        maxAge: 30 * 24 * 60 * 60 * 1000 // 30 Days (standard for persistent logins)
     }
 }));
 
@@ -238,12 +244,12 @@ app.post('/api/tickets', async (req, res) => {
     try {
         await client.query('BEGIN');
         const ticketRes = await client.query(
-            'INSERT INTO tickets (steamId, username, avatar, category, subject) VALUES (\$1, \$2, \$3, \$4, \$5) RETURNING id',
+            'INSERT INTO tickets (steam_id, username, avatar, category, subject) VALUES (\$1, \$2, \$3, \$4, \$5) RETURNING id',
             [req.user.id, req.user.displayName, req.user.photos[2].value, category, subject]
         );
         const ticketId = ticketRes.rows[0].id;
         await client.query(
-            'INSERT INTO messages (ticket_id, sender_steamId, sender_name, sender_avatar, content) VALUES (\$1, \$2, \$3, \$4, \$5)',
+            'INSERT INTO messages (ticket_id, sender_steam_id, sender_name, sender_avatar, content) VALUES (\$1, \$2, \$3, \$4, \$5)',
             [ticketId, req.user.id, req.user.displayName, req.user.photos[2].value, description]
         );
         await client.query('COMMIT');
@@ -259,7 +265,7 @@ app.post('/api/tickets', async (req, res) => {
 app.get('/api/my-tickets', async (req, res) => {
     if (!req.user) return res.status(401).json([]);
     try {
-        const result = await pool.query('SELECT * FROM tickets WHERE steamId = \$1 ORDER BY id DESC', [req.user.id]);
+        const result = await pool.query('SELECT * FROM tickets WHERE steam_id = \$1 ORDER BY id DESC', [req.user.id]);
         res.json(result.rows);
     } catch (err) { res.json([]); }
 });
@@ -302,7 +308,7 @@ app.post('/api/ticket/:id/reply', async (req, res) => {
         }
 
         await pool.query(
-            'INSERT INTO messages (ticket_id, sender_steamId, sender_name, sender_avatar, content) VALUES (\$1, \$2, \$3, \$4, \$5)',
+            'INSERT INTO messages (ticket_id, sender_steam_id, sender_name, sender_avatar, content) VALUES (\$1, \$2, \$3, \$4, \$5)',
             [ticketId, req.user.id, req.user.displayName, req.user.photos[2].value, req.body.content]
         );
         
