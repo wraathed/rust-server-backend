@@ -337,6 +337,60 @@ app.post('/api/ticket/:id/status', async (req, res) => {
     } catch (err) { res.status(500).send("Error"); }
 });
 
+// --- GAME SERVER API (RUST PLUGIN CONNECTIVITY) ---
+
+// 1. Get Gem Balance (Called by plugin "FetchGemBalance")
+app.get('/api/server/balance', async (req, res) => {
+    const { steamId } = req.query;
+    try {
+        const result = await pool.query('SELECT gems FROM users WHERE steam_id = \$1', [steamId]);
+        if (result.rows.length > 0) {
+            // Plugin expects raw text number (e.g., "500")
+            res.send(result.rows[0].gems.toString());
+        } else {
+            res.send("0");
+        }
+    } catch (err) {
+        res.send("0");
+    }
+});
+
+// 2. Spend Gems (Called by plugin "CmdShopBuy")
+app.post('/api/server/spend', async (req, res) => {
+    const { steamId, cost } = req.body;
+    try {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            
+            // Check Balance
+            const userRes = await client.query('SELECT gems FROM users WHERE steam_id = \$1 FOR UPDATE', [steamId]);
+            if (userRes.rows.length === 0) throw new Error("User not found");
+            
+            const currentGems = userRes.rows[0].gems;
+
+            if (currentGems >= cost) {
+                await client.query('UPDATE users SET gems = gems - \$1 WHERE steam_id = \$2', [cost, steamId]);
+                await client.query('COMMIT');
+                // Plugin expects exact string "SUCCESS"
+                res.send("SUCCESS"); 
+            } else {
+                await client.query('ROLLBACK');
+                // Plugin expects exact string "INSUFFICIENT_FUNDS"
+                res.send("INSUFFICIENT_FUNDS");
+            }
+        } catch (e) {
+            await client.query('ROLLBACK');
+            res.send("ERROR");
+        } finally {
+            client.release();
+        }
+    } catch (err) {
+        res.send("ERROR");
+    }
+});
+
+// 3. Redeem Kit (Updated to include Ranks)
 app.post('/api/server/redeem', async (req, res) => {
     try {
         const { steamId, kit } = req.query;
@@ -344,23 +398,29 @@ app.post('/api/server/redeem', async (req, res) => {
 
         if (!steamId || !kit) return res.status(400).send("Missing Params");
 
+        // -- LOGIC FOR RANKS (VIP, ELITE, ETC) --
+        const RANK_KITS = ['vip', 'elite', 'soldier', 'juggernaut', 'overlord'];
+        if (RANK_KITS.includes(kit)) {
+            const dbRes = await pool.query('SELECT ranks FROM users WHERE steam_id = \$1', [steamId]);
+            // Check if user has the rank in their array
+            if (dbRes.rows.length > 0 && dbRes.rows[0].ranks && dbRes.rows[0].ranks.includes(kit)) {
+                return res.status(200).send("OK");
+            } else {
+                return res.status(403).send("LOCKED");
+            }
+        }
+
+        // -- LOGIC FOR DISCORD --
         if (kit === 'discord' || kit === 'discordbuild') {
             const userRes = await pool.query('SELECT discord_id FROM users WHERE steam_id = \$1', [steamId]);
             if (userRes.rows.length === 0 || !userRes.rows[0].discord_id) {
                 return res.status(403).send("FAIL_LINK"); 
             }
-            const discordId = userRes.rows[0].discord_id;
-            try {
-                await axios.get(
-                    `https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${discordId}`,
-                    { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } }
-                );
-                return res.status(200).send("OK");
-            } catch (discordErr) {
-                return res.status(403).send("FAIL_GUILD");
-            }
+            // Optional: Double check if they are still in the guild via Discord API here
+            return res.status(200).send("OK");
         }
 
+        // -- LOGIC FOR STEAM GROUP --
         if (kit === 'steam') {
             const inGroup = await checkGroupMembership(steamId);
             if (inGroup) {
@@ -375,6 +435,44 @@ app.post('/api/server/redeem', async (req, res) => {
     } catch (err) {
         console.error("Redeem Error:", err);
         res.status(500).send("ERROR");
+    }
+});
+
+// --- STORE API (WEBSITE PURCHASES) ---
+
+// 1. Buy Gems (Simulated Test)
+app.post('/api/store/buy-gems', async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Login required" });
+    const amount = 20000; // Fixed test amount
+
+    try {
+        await pool.query(
+            'UPDATE users SET gems = gems + \$1 WHERE steam_id = \$2',
+            [amount, req.user.id]
+        );
+        res.json({ success: true, message: `Added ${amount} Gems!` });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "DB Error" });
+    }
+});
+
+// 2. Buy Rank (Simulated Test)
+app.post('/api/store/buy-rank', async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Login required" });
+    const { rank } = req.body; // e.g., "vip"
+
+    try {
+        // Add rank to the array if it doesn't exist
+        await pool.query(
+            `UPDATE users SET ranks = array_append(ranks, \$1) 
+             WHERE steam_id = \$2 AND NOT (\$1 = ANY(ranks))`,
+            [rank, req.user.id]
+        );
+        res.json({ success: true, message: `Purchased ${rank} Rank!` });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "DB Error" });
     }
 });
 

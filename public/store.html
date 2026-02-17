@@ -4,6 +4,30 @@
     <meta charset="UTF-8">
     <title>Classic Rust - Store</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Test Panel Styling */
+        .test-panel {
+            background-color: #2a2a2a;
+            border: 2px dashed var(--primary-orange);
+            padding: 20px;
+            margin: 20px auto;
+            max-width: 800px;
+            text-align: center;
+            border-radius: 10px;
+        }
+        .test-panel h3 { margin-top: 0; color: var(--primary-orange); }
+        .test-btn {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            color: white;
+        }
+        .btn-gem { background-color: #0088cc; } /* Blue for Gems */
+        .btn-vip { background-color: #8e44ad; } /* Purple for VIP */
+    </style>
 </head>
 <body>
 
@@ -17,7 +41,7 @@
         <nav>
             <ul>
                 <li><a href="servers.html">Servers</a></li>
-                <li><a href="store.html">Store</a></li>
+                <li><a href="store.html" class="active">Store</a></li>
                 <li><a href="create-ticket.html">Create a Ticket</a></li>
                 <li><a href="profile.html">My Profile</a></li>
             </ul>
@@ -31,17 +55,30 @@
     </header>
     
     <div class="container">
+
+        <!-- DEV TEST PANEL -->
+        <div class="test-panel">
+            <h3>🛠️ DEVELOPER TEST ACTIONS</h3>
+            <p>Click these to simulate a website purchase. Changes apply immediately in-game.</p>
+            
+            <button onclick="buyGems()" class="test-btn btn-gem">💎 Add 20,000 Gems</button>
+            <button onclick="buyRank('vip')" class="test-btn btn-vip">👑 Buy VIP Rank</button>
+        </div>
+
         <h2 style="text-align: center; border: none;">Store Packages</h2>
         <p style="text-align: center; color: #aaa; margin-bottom: 40px;">Select a package to enhance your experience.</p>
         
         <div class="store-grid">
+            <!-- VIP CARD -->
             <div class="card">
                 <h3 style="color: #aaa;">VIP</h3>
                 <p>Perfect for casual players.<br><br>• Skip Queue<br>• Skinbox Access<br>• 2x Kits</p>
                 <h4>\$10.00 <span style="font-size: 14px; color: #666;">/ mo</span></h4>
-                <a href="#" class="btn btn-primary" style="background-color: transparent; border: 1px solid var(--primary-orange); color: var(--primary-orange);">Buy Now</a>
+                <!-- Hooked up to the script -->
+                <button onclick="buyRank('vip')" class="btn btn-primary" style="background-color: transparent; border: 1px solid var(--primary-orange); color: var(--primary-orange); width: 100%; cursor: pointer;">Buy Test</button>
             </div>
 
+            <!-- MVP CARD -->
             <div class="card featured">
                 <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary-orange); color: black; padding: 2px 10px; font-size: 10px; font-weight: bold; border-radius: 4px; text-transform: uppercase;">Most Popular</div>
                 <h3 style="color: var(--primary-orange);">MVP</h3>
@@ -50,6 +87,7 @@
                 <a href="#" class="btn btn-primary">Buy Now</a>
             </div>
 
+            <!-- ELITE CARD -->
             <div class="card">
                 <h3 style="color: #e74c3c;">Elite</h3>
                 <p>Ultimate status and dominance.<br><br>• <b>All MVP Perks</b><br>• Custom Chat Tag<br>• Reserved Slot<br>• Sign Artist</p>
@@ -79,5 +117,50 @@
     <script src="auth.js"></script>
     <script src="loader.js"></script>
     <script src="mobile.js"></script>
+    
+    <script>
+        const API_BASE = ''; // Same domain
+
+        // FUNCTION 1: Buy Gems
+        async function buyGems() {
+            try {
+                const res = await fetch(`${API_BASE}/api/store/buy-gems`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include' // Required for session
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    alert(data.message);
+                } else {
+                    alert(data.error || "Login Required!");
+                }
+            } catch (e) {
+                alert("Error connecting to server.");
+            }
+        }
+
+        // FUNCTION 2: Buy Rank
+        async function buyRank(rankName) {
+            try {
+                const res = await fetch(`${API_BASE}/api/store/buy-rank`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include', // Required for session
+                    body: JSON.stringify({ rank: rankName })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    alert(data.message + "\nType /kit in game to redeem!");
+                } else {
+                    alert(data.error || "Login Required!");
+                }
+            } catch (e) {
+                alert("Error connecting to server.");
+            }
+        }
+    </script>
 </body>
 </html>
