@@ -479,6 +479,61 @@ app.post('/api/server/redeem', async (req, res) => {
     }
 });
 
+// --- NEW: Shop Points Logic ---
+
+// 1. Get User Data (Combined Balance) - used by the new Shop UI
+// --- GET USER DATA (GEMS & POINTS) ---
+app.get('/api/server/user-data', async (req, res) => {
+    const { steamId } = req.query;
+    try {
+        const result = await pool.query('SELECT gems, shop_points FROM users WHERE steam_id = \$1', [steamId]);
+        
+        if (result.rows.length > 0) {
+            // We map 'shop_points' from DB to 'points' for the JSON
+            res.json({ 
+                gems: result.rows[0].gems || 0, 
+                points: result.rows[0].shop_points || 0 
+            });
+        } else {
+            res.json({ gems: 0, points: 0 });
+        }
+    } catch (err) {
+        console.error("User Data Error:", err);
+        res.json({ gems: 0, points: 0 });
+    }
+});
+
+// 2. Spend Shop Points
+app.post('/api/server/spend-points', async (req, res) => {
+    const { steamId, cost } = req.body;
+    try {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            const userRes = await client.query('SELECT shop_points FROM users WHERE steam_id = \$1 FOR UPDATE', [steamId]);
+            if (userRes.rows.length === 0) throw new Error("User not found");
+            
+            const currentPoints = userRes.rows[0].shop_points || 0;
+
+            if (currentPoints >= cost) {
+                await client.query('UPDATE users SET shop_points = shop_points - \$1 WHERE steam_id = \$2', [cost, steamId]);
+                await client.query('COMMIT');
+                res.send("SUCCESS"); 
+            } else {
+                await client.query('ROLLBACK');
+                res.send("INSUFFICIENT_FUNDS");
+            }
+        } catch (e) {
+            await client.query('ROLLBACK');
+            res.send("ERROR");
+        } finally {
+            client.release();
+        }
+    } catch (err) {
+        res.send("ERROR");
+    }
+});
+
 // --- STORE API (WEBSITE PURCHASES) ---
 
 // 1. Buy Gems (Simulated Test)
