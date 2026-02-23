@@ -73,7 +73,8 @@
             <p>Click to instantly add items to your account for testing.</p>
             
             <button onclick="buyGems()" class="test-btn btn-gem">💎 +500 Gems</button>
-            <div style="display: inline-block; width: 20px;"></div> <!-- Spacer -->
+<button onclick="buyPoints()" class="test-btn" style="background-color: #2ecc71;">🪙 +500 Shop Points</button>
+<div style="display: inline-block; width: 20px;"></div> <!-- Spacer -->
             <button onclick="buyRank('vip')" class="test-btn btn-rank">Unlock VIP</button>
             <button onclick="buyRank('elite')" class="test-btn btn-rank">Unlock Elite</button>
             <button onclick="buyRank('soldier')" class="test-btn btn-rank">Unlock Soldier</button>
@@ -194,6 +195,27 @@
                 alert("Error connecting to server.");
             }
         }
+
+
+        // 3. Buy Shop Points
+async function buyPoints() {
+    try {
+        const res = await fetch(`${API_BASE}/api/store/buy-points`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include' 
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            alert(data.message);
+        } else {
+            alert(data.error || "Login Required!");
+        }
+    } catch (e) {
+        alert("Error connecting to server.");
+    }
+}
     </script>
 </body>
 </html>

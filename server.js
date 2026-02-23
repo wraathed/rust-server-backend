@@ -390,6 +390,47 @@ app.post('/api/server/spend', async (req, res) => {
     }
 });
 
+// --- NEW: SHOP POINTS SYSTEM ---
+
+// 1. Grant Shop Points (Called by Rust Plugin every 20 mins)
+app.post('/api/server/grant-points', async (req, res) => {
+    const { steamId, amount } = req.body;
+    
+    // Basic validation
+    if (!steamId || !amount) return res.status(400).send("MISSING_DATA");
+
+    try {
+        // Increment shop_points. If user doesn't exist, ignore (or could insert).
+        // Assuming user exists because they are online playing.
+        await pool.query(
+            'UPDATE users SET shop_points = shop_points + \$1 WHERE steam_id = \$2',
+            [amount, steamId]
+        );
+        console.log(`[Points System] Granted ${amount} points to ${steamId}`);
+        res.status(200).send("OK");
+    } catch (err) {
+        console.error("Grant Points Error:", err);
+        res.status(500).send("ERROR");
+    }
+});
+
+// 2. Buy Shop Points (Website Test Panel)
+app.post('/api/store/buy-points', async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Login required" });
+    const amount = 500; // Fixed test amount
+
+    try {
+        await pool.query(
+            'UPDATE users SET shop_points = shop_points + \$1 WHERE steam_id = \$2',
+            [amount, req.user.id]
+        );
+        res.json({ success: true, message: `Added ${amount} Shop Points!` });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "DB Error" });
+    }
+});
+
 // 3. Redeem Kit (Updated to include Ranks)
 app.post('/api/server/redeem', async (req, res) => {
     try {
