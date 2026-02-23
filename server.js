@@ -483,23 +483,42 @@ app.post('/api/server/redeem', async (req, res) => {
 
 // 1. Get User Data (Combined Balance) - used by the new Shop UI
 // --- GET USER DATA (GEMS & POINTS) ---
+// --- GET USER DATA (GEMS, POINTS, RANKS, VERIFICATION) ---
 app.get('/api/server/user-data', async (req, res) => {
     const { steamId } = req.query;
     try {
-        const result = await pool.query('SELECT gems, shop_points FROM users WHERE steam_id = \$1', [steamId]);
+        // Fetch financial data, ranks, and discord status
+        const result = await pool.query('SELECT gems, shop_points, ranks, discord_id FROM users WHERE steam_id = \$1', [steamId]);
         
+        let gems = 0;
+        let points = 0;
+        let ranks = [];
+        let hasDiscord = false;
+
         if (result.rows.length > 0) {
-            // We map 'shop_points' from DB to 'points' for the JSON
-            res.json({ 
-                gems: result.rows[0].gems || 0, 
-                points: result.rows[0].shop_points || 0 
-            });
-        } else {
-            res.json({ gems: 0, points: 0 });
+            const row = result.rows[0];
+            gems = row.gems || 0;
+            points = row.shop_points || 0;
+            ranks = row.ranks || []; // PostgreSQL array comes back as JS array
+            hasDiscord = !!row.discord_id; // Convert truthy string to boolean
         }
+
+        // Check Steam Group Status (Real-time)
+        // Note: We use the helper function you already defined in server.js
+        const inSteamGroup = await checkGroupMembership(steamId);
+
+        res.json({ 
+            gems, 
+            points, 
+            ranks, 
+            discord: hasDiscord, 
+            steam: inSteamGroup 
+        });
+
     } catch (err) {
         console.error("User Data Error:", err);
-        res.json({ gems: 0, points: 0 });
+        // Return safe defaults so the UI doesn't crash, just shows locked
+        res.json({ gems: 0, points: 0, ranks: [], discord: false, steam: false });
     }
 });
 
